@@ -30,7 +30,7 @@ export async function load(file: string, fast = true): Promise<Program> {
 }
 
 class Deadline extends Error {
-  constructor() { super("per-law time budget exhausted"); }
+  constructor(message = "per-law time budget exhausted") { super(message); }
 }
 
 class Evaluation {
@@ -77,27 +77,14 @@ class Evaluation {
     return result;
   }
 
-  proposition(type: Term, depth = 0): boolean {
+  proofOnly(type: Term, depth = 0): boolean {
     if (depth > 40) throw new Unsupported("recursive proposition shape");
     const t = this.whnf(type);
-    if (t.$ === "Eql" || t.$ === "All") return true;
+    if (t.$ === "Eql") return true;
     if (t.$ !== "ADT") return false;
     if (t.k === "Unit" || t.k === "Empty") return true;
-    if (t.k === "Sigma") {
-      const a = t.x[2], b = B.App(t.x[3], B.Var("witness", 7000 + depth));
-      return (this.proposition(a, depth + 1) && this.proposition(b, depth + 1))
-        || this.constraint(a, depth + 1) || this.constraint(b, depth + 1);
-    }
-    return false;
-  }
-
-  private constraint(type: Term, depth: number): boolean {
-    if (depth > 40) throw new Unsupported("recursive proposition shape");
-    const t = this.whnf(type);
-    if (t.$ === "Eql" || t.$ === "All") return true;
-    if (t.$ !== "ADT") return false;
-    return t.k === "Empty" || (t.k === "Sigma" && (this.constraint(t.x[2], depth + 1)
-      || this.constraint(B.App(t.x[3], B.Var("witness", 7000 + depth)), depth + 1)));
+    return t.k === "Sigma" && this.proofOnly(t.x[2], depth + 1)
+      && this.proofOnly(B.App(t.x[3], B.Var("proof", -200000 - depth)), depth + 1);
   }
 
   decide(type: Term, depth = 0): Decision {
@@ -113,7 +100,7 @@ class Evaluation {
         : { ok: false, left: show(a), right: show(b) };
     }
     if (t.$ === "All") {
-      if (!this.proposition(t.A)) throw new Unsupported("cannot decide an unbounded universal claim: " + show(t.A));
+      if (!this.proofOnly(t.A)) throw new Unsupported("cannot decide an unbounded universal claim: " + show(t.A));
       const premise = this.decide(t.A, depth + 1);
       if (!premise.ok) return { ok: true, proof: B.Efq() };
       const conclusion = this.decide(t.B(premise.proof), depth + 1);
@@ -123,7 +110,7 @@ class Evaluation {
       if (t.k === "Unit") return { ok: true, proof: B.Ctr("Unit", []) };
       if (t.k === "Empty") return { ok: false, left: "Empty", right: "an inhabited type" };
       if (t.k === "Sigma") {
-        if (this.proposition(t.x[2])) {
+        if (this.proofOnly(t.x[2])) {
           const a = this.decide(t.x[2], depth + 1);
           if (!a.ok) return a;
           const b = this.decide(B.App(t.x[3], a.proof), depth + 1);
@@ -141,7 +128,7 @@ class Evaluation {
     let body = type;
     while (true) {
       const t = this.whnf(body);
-      if (t.$ !== "ADT" || t.k !== "Sigma" || this.proposition(t.x[2])) break;
+      if (t.$ !== "ADT" || t.k !== "Sigma" || this.proofOnly(t.x[2])) break;
       const variable = constraints.variable("witness");
       variables.push(variable);
       body = B.App(t.x[3], variable);
@@ -151,7 +138,7 @@ class Evaluation {
       if (depth > 100) throw new Unsupported("existential nesting exceeds 100");
       const t = this.whnf(type);
       if (t.$ === "Eql") equations.push(t);
-      if (t.$ === "ADT" && t.k === "Sigma" && this.proposition(t.x[2])) {
+      if (t.$ === "ADT" && t.k === "Sigma" && this.proofOnly(t.x[2])) {
         collect(t.x[2], depth + 1);
         collect(B.App(t.x[3], B.Var("proof", -200000 - depth)), depth + 1);
       }
@@ -227,9 +214,16 @@ function instance(program: Program, name: string, ev: Evaluation, generator?: Ge
   for (let i = 0; i < def.n; i++) {
     const all = ev.whnf(t);
     if (all.$ !== "All") throw new Unsupported("law binder is not a function");
-    if (ev.proposition(all.A)) {
+    if (ev.proofOnly(all.A) || ev.whnf(all.A).$ === "All") {
       const hypothesis = ev.decide(all.A);
       if (!hypothesis.ok) return { accepted: false, bindings };
+      try {
+        B.term_check(program.book, { t: B.Ref(name), n: 0, def: name, qs: [] },
+          hypothesis.proof!, B.Lone(), all.A, B.ctx_nil(), 0);
+      } catch (e) {
+        if ((e as any)?.$ !== "Err") throw e;
+        throw new Unsupported("generated hypothesis proof did not type-check");
+      }
       t = all.B(hypothesis.proof);
     } else {
       const value = supplied ? supplied[bindings.length] : generator!.value(all.A);
@@ -311,6 +305,7 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
         replay = instance({ ...program, book: program.originalBook }, name,
           new Evaluation(program.originalBook, ev.until), undefined, bindings.map(b => b.value));
       } catch (e) {
+        if (e instanceof Deadline) throw new Deadline("counterexample replay time budget exhausted");
         throw new Unsupported("counterexample replay could not finish: " + errorText(e));
       }
       if (!replay.accepted || replay.decision!.ok) {

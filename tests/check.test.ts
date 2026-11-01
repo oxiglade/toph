@@ -119,3 +119,20 @@ test("a counterexample whose plain replay times out is never reported", async ()
   expect(report.results[0].bindings).toBeUndefined();
   expect(report.results[1].status).toBe("pass");
 });
+
+test("a short scheduling trial reserves time for a slower counterexample replay", async () => {
+  const report = await runFile(fixture("replay-budget"), { ...options, n: 1, time: 3, fileTime: 5 });
+  expect(report.results.map(r => r.status)).toEqual(["fail", "pass"]);
+  expect(report.results[0].replayed).toBe(true);
+});
+
+test("proof domains carrying data are searched and cannot justify a universal hypothesis", async () => {
+  const program = await load(fixture("witness-domains"));
+  const results = program.laws.map(law => checkLaw(program, law, options));
+  expect(results.map(r => r.status)).toEqual(["pass", "unknown", "fail", "unknown"]);
+  expect(results[2].bindings?.p).toBeDefined();
+  expect(results[3].reason).toContain("hypothesis proof did not type-check");
+  const proof = B.Ctr("Tuple", [B.Ctr("Tuple", [B.Lit("Nat", 1), B.Rfl()]), B.Rfl()]);
+  B.term_check(program.originalBook, { t: B.Ref("nested_choice"), n: 0, def: "nested_choice", qs: [] },
+    proof, B.Lone(), program.originalBook.tlds.nested_choice.T, B.ctx_nil(), 0);
+});
