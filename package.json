@@ -7,7 +7,6 @@
   "scripts": {
     "test": "bun test",
     "build": "bun build --compile src/cli.ts src/check/worker.ts --outfile dist/toph",
-    "vendor:bend": "bun scripts/vendor-bend.ts",
     "release": "bun scripts/release.ts"
   }
 }

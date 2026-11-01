@@ -1,4 +1,4 @@
-import { B, type Term } from "../bend.ts";
+import { B, show, type Term } from "../bend.ts";
 import { js_lib } from "../../vendor/bend/comp.ts";
 
 const names = ["add", "sub", "mul", "div", "mod", "min", "max", "double", "is_lt", "is_le", "is_gt", "is_ge", "is_eq", "is_ne"].map(n => "Nat." + n);
@@ -12,7 +12,7 @@ async function library() {
   const wrappers = names.map((name, i) => {
     const { doms, ret } = B.tele_unbind(book, book.tlds[name].T);
     const args = doms.map((_: unknown, j: number) => "n" + j);
-    return `def fast${i}(${args.map((n: string) => n + ": Nat").join(", ")}) -> ${B.term_show(B.term_lower(ret))}:\n  ${name}(${args.join(", ")})\n`;
+    return `def fast${i}(${args.map((n: string) => n + ": Nat").join(", ")}) -> ${show(ret)}:\n  ${name}(${args.join(", ")})\n`;
   }).join("\n");
   B.parse_book(book, B.BEND_DIR, wrappers, "", {});
   B.book_valid(book, done);

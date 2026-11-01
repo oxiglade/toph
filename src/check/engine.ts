@@ -5,7 +5,7 @@ import { accelerate } from "./naturals.ts";
 import { Constraints, type Variable } from "./constraints.ts";
 
 export type Options = { n: number; seed: number; time: number; samples?: number; fileTime?: number; size?: number };
-export type Program = { book: any; originalBook: any; laws: string[]; loadMs: number };
+export type Program = { book: any; originalBook: any; laws: string[] };
 export type Result = {
   law: string; status: "pass" | "fail" | "vacuous" | "unknown" | "timeout";
   attempted: number; accepted: number; elapsedMs: number; seed: number;
@@ -18,7 +18,6 @@ type Decision = { ok: boolean; proof?: Term; left?: string; right?: string };
 type Binding = { name: string; type: Term; value: Term };
 
 export async function load(file: string, fast = true): Promise<Program> {
-  const start = performance.now();
   const book = B.book_nil();
   await B.book_load(book, resolve(file), "", new Map());
   B.book_valid(book);
@@ -26,7 +25,7 @@ export async function load(file: string, fast = true): Promise<Program> {
     const def = book.tlds[name];
     return def.$ === "Def" && def.l && !def.b;
   });
-  return { book: fast ? await accelerate(book) : book, originalBook: book, laws, loadMs: performance.now() - start };
+  return { book: fast ? await accelerate(book) : book, originalBook: book, laws };
 }
 
 class Deadline extends Error {
@@ -122,6 +121,11 @@ class Evaluation {
     throw new Unsupported("cannot decide " + show(t));
   }
 
+  private tryNormal(term: Term): Term | undefined {
+    try { return this.normal(term); }
+    catch (e) { if (e instanceof Unsupported) return undefined; throw e; }
+  }
+
   private existential(type: Term, depth: number): Decision {
     const constraints = new Constraints(this.book, () => this.tick());
     const variables: Variable[] = [];
@@ -151,10 +155,7 @@ class Evaluation {
         if (result === false) return { ok: false, left: show(equation), right: "an existential witness" };
       }
     }
-    const solutions = variables.map(variable => {
-      try { return this.normal(variable); }
-      catch (e) { if (e instanceof Unsupported) return undefined; throw e; }
-    });
+    const solutions = variables.map(variable => this.tryNormal(variable));
     const forced = solutions.every(v => v !== undefined);
     let reason = "no satisfying witness";
     for (let trial = 0; trial < (forced ? 1 : 64); trial++) {
@@ -187,15 +188,11 @@ class Evaluation {
     for (const [pattern, ground] of [[left, right], [right, left]]) {
       const [head, args] = B.term_unapply(this.whnf(pattern));
       if (head.$ !== "Ref" || head.k !== "String.append" || args.length !== 2) continue;
-      let value: Term;
-      try { value = this.normal(ground); }
-      catch (e) { if (e instanceof Unsupported) continue; throw e; }
-      if (value.$ !== "Lit" || value.k !== "String") continue;
+      const value = this.tryNormal(ground);
+      if (value?.$ !== "Lit" || value.k !== "String") continue;
       for (const index of [0, 1]) {
-        let fixed: Term;
-        try { fixed = this.normal(args[1 - index]); }
-        catch (e) { if (e instanceof Unsupported) continue; throw e; }
-        if (fixed.$ !== "Lit" || fixed.k !== "String") continue;
+        const fixed = this.tryNormal(args[1 - index]);
+        if (fixed?.$ !== "Lit" || fixed.k !== "String") continue;
         const matches = index === 0 ? value.v.endsWith(fixed.v) : value.v.startsWith(fixed.v);
         if (!matches) return false;
         const rest = index === 0 ? value.v.slice(0, value.v.length - fixed.v.length) : value.v.slice(fixed.v.length);
@@ -207,8 +204,8 @@ class Evaluation {
 
 }
 
-function instance(program: Program, name: string, ev: Evaluation, generator?: Generator, supplied?: Term[]) {
-  const def = program.book.tlds[name];
+function instance(ev: Evaluation, name: string, generator?: Generator, supplied?: Term[]) {
+  const def = ev.book.tlds[name];
   const bindings: Binding[] = [];
   let t = def.T;
   for (let i = 0; i < def.n; i++) {
@@ -218,7 +215,7 @@ function instance(program: Program, name: string, ev: Evaluation, generator?: Ge
       const hypothesis = ev.decide(all.A);
       if (!hypothesis.ok) return { accepted: false, bindings };
       try {
-        B.term_check(program.book, { t: B.Ref(name), n: 0, def: name, qs: [] },
+        B.term_check(ev.book, { t: B.Ref(name), n: 0, def: name, qs: [] },
           hypothesis.proof!, B.Lone(), all.A, B.ctx_nil(), 0);
       } catch (e) {
         if ((e as any)?.$ !== "Err") throw e;
@@ -230,7 +227,7 @@ function instance(program: Program, name: string, ev: Evaluation, generator?: Ge
       if (value === undefined) throw new Unsupported("dependent binder changed during shrinking");
       if (supplied) {
         try {
-          B.term_check(program.book, { t: B.Ref(name), n: 0, def: name, qs: [] }, value, B.Lone(), all.A, B.ctx_nil(), 0);
+          B.term_check(ev.book, { t: B.Ref(name), n: 0, def: name, qs: [] }, value, B.Lone(), all.A, B.ctx_nil(), 0);
         } catch (e) {
           if ((e as any)?.$ === "Err") return { accepted: false, bindings };
           throw e;
@@ -259,7 +256,7 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
     for (let i = 0; i < options.n; i++) {
       ev.tick();
       result.attempted++;
-      const sample = instance(program, name, ev,
+      const sample = instance(ev, name,
         new Generator(program.book, rng, i % 5 === 0, i % ((options.size ?? 4) + 1)));
       if (!sample.accepted) continue;
       result.accepted++;
@@ -285,7 +282,7 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
               ev.tick();
               result.shrinkChecks++;
               const values = bindings.map((b, k) => j === k ? v : b.value);
-              const shrunk = instance(program, name, ev, undefined, values);
+              const shrunk = instance(ev, name, undefined, values);
               if (shrunk.accepted && !shrunk.decision!.ok) {
                 bindings = shrunk.bindings;
                 decision = shrunk.decision!;
@@ -302,8 +299,7 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
       }
       let replay;
       try {
-        replay = instance({ ...program, book: program.originalBook }, name,
-          new Evaluation(program.originalBook, ev.until), undefined, bindings.map(b => b.value));
+        replay = instance(new Evaluation(program.originalBook, ev.until), name, undefined, bindings.map(b => b.value));
       } catch (e) {
         if (e instanceof Deadline) throw new Deadline("counterexample replay time budget exhausted");
         throw new Unsupported("counterexample replay could not finish: " + errorText(e));
@@ -334,9 +330,7 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
   return result;
 }
 
-export function replayLaw(program: Program, name: string, values: Term[], time = 10) {
-  const sample = instance({ ...program, book: program.originalBook }, name,
-    new Evaluation(program.originalBook, performance.now() + time * 1000),
-    undefined, values.map(v => B.term_higher(v)));
+export function replayLaw(program: Program, name: string, values: Term[]) {
+  const sample = instance(new Evaluation(program.originalBook, performance.now() + 10000), name, undefined, values.map(v => B.term_higher(v)));
   return !sample.accepted ? "skip" : sample.decision!.ok ? "pass" : "fail";
 }

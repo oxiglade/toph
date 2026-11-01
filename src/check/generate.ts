@@ -111,8 +111,7 @@ export class Generator {
           }
           return value.$ === "Ctr" ? B.Ctr(value.k, value.x.map(fill)) : value;
         };
-        const value = B.Ctr(c.k, slots.map(s => fill(s.variable)));
-        return value;
+        return B.Ctr(c.k, slots.map(s => fill(s.variable)));
       } catch (e) {
         if (!(e instanceof Unsupported)) throw e;
         reason = e.message;

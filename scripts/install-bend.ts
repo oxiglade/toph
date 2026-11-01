@@ -24,9 +24,6 @@ async function download(url: string) {
 }
 
 async function install(destination: string) {
-  if (!["darwin", "linux"].includes(process.platform) || !["arm64", "x64"].includes(process.arch)) {
-    throw new Error("unsupported Bend platform: " + process.platform + "-" + process.arch);
-  }
   const lock = JSON.parse(readFileSync(new URL("../devenv.lock", import.meta.url), "utf8"));
   const commit = lock.nodes.bend.locked.rev;
   if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error("Bend must be pinned to an exact commit in devenv.lock");

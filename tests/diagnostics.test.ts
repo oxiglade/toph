@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "../src/syntax/build.ts";
 import { desugar, desugarMapped } from "../src/syntax/desugar.ts";
-import { originAt } from "../src/syntax/source.ts";
+import { bendError, mapped, originAt } from "../src/syntax/source.ts";
+import { B } from "../src/bend.ts";
 
 const source = "import Base\nlaw conflict:\n  0n == True{}\n";
 
@@ -16,12 +17,8 @@ test("inference errors identify the expression, source line and caret", async ()
 });
 
 test("syntax diagnostics include several locations", async () => {
-  try {
-    await desugar("import Base\nlaw a:\n  when )\n  0n ==\nlaw b:\n  [1n,, 2n]\n", "bad.law");
-    throw new Error("expected failure");
-  } catch (error) {
-    for (const location of ["bad.law:3:8", "bad.law:4:8", "bad.law:6:7"]) expect(String(error)).toContain(location);
-  }
+  const error = await desugar("import Base\nlaw a:\n  when )\n  0n ==\nlaw b:\n  [1n,, 2n]\n", "bad.law").catch(String);
+  for (const location of ["bad.law:3:8", "bad.law:4:8", "bad.law:6:7"]) expect(error).toContain(location);
 });
 
 test("every generated character maps to its source, including inferred arguments", async () => {
@@ -62,8 +59,6 @@ test("Bend errors in imported law helpers retain the helper origin", async () =>
 });
 
 test("source maps cover EOF and distinguish identical modules", async () => {
-  const { B } = await import("../src/bend.ts");
-  const { mapped, bendError } = await import("../src/syntax/source.ts");
   const text = "def value() -> Nat:\n  )";
   const first = { ...mapped(text, { source: { file: "first.law", text }, start: 22, end: 23 }), namespace: "First" };
   const second = { ...mapped(text, { source: { file: "second.law", text }, start: 22, end: 23 }), namespace: "Second" };

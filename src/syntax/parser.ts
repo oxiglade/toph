@@ -2,7 +2,7 @@ import type { Declaration, Expr, Module, Parameter, Statement } from "./ast.ts";
 import { lex, type Token } from "./lexer.ts";
 import { SourceError, type Diagnostic, type Source, type Span } from "./source.ts";
 
-export const precedence: Record<string, number> = { "=>": 1, "->": 2, "&": 3, "||": 4, "&&": 5, "==": 6, "!=": 6, "<": 7, "<=": 7, ">": 7, ">=": 7, "<>": 8, "++": 8, "+": 9, "-": 9, "*": 10, "/": 10, "%": 10 };
+const precedence: Record<string, number> = { "=>": 1, "->": 2, "&": 3, "||": 4, "&&": 5, "==": 6, "!=": 6, "<": 7, "<=": 7, ">": 7, ">=": 7, "<>": 8, "++": 8, "+": 9, "-": 9, "*": 10, "/": 10, "%": 10 };
 const rightAssociative = new Set(["=>", "->", "&", "<>", "++"]);
 const reserved = new Set(["law", "def", "import", "as", "when", "exs", "match", "case", "for", "type", "do", "return", "where", "is"]);
 
@@ -176,7 +176,7 @@ class Parser {
   }
   suite(indent: number): Statement[] {
     const body: Statement[] = [];
-    while (this.current.kind !== "eof" && this.current.column >= indent && this.current.column > 0) {
+    while (this.current.kind !== "eof" && this.current.column >= indent) {
       try {
         if (this.current.column !== indent) this.fail("unexpected indentation");
         body.push(this.statement(indent));

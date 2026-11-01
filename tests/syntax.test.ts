@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { runFile } from "../src/check/run.ts";
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -53,7 +54,6 @@ test("law imports share projections and separate builds keep their own fields", 
     writeFileSync(join(dir, "helper.law"), "import Base\nimport ./records.bend as R\ndef value(c: R.Counter) -> Nat:\n  c.value\n");
     writeFileSync(join(dir, "LAWS.law"), "import Base\nimport ./records.bend as R\nimport ./helper.law as H\nlaw projection(+c: R.Counter):\n  c.value == H.value(c)\n");
     const output = await build(join(dir, "LAWS.law"));
-    const { runFile } = await import("../src/check/run.ts");
     expect((await runFile(output, { n: 30, seed: 42, time: 5 })).results[0].status).toBe("pass");
     writeFileSync(join(dir, "other.law"), "import Base\nlaw independent:\n  1n == 1n\n");
     await build(join(dir, "other.law"));
@@ -81,7 +81,6 @@ test("premises, Boolean lifting and erased List arguments keep their meaning", a
     const source = "import Base\n\nlaw positive(+n):\n  when n > 0n\n  n == 0n\n\nlaw negative(b: Bool):\n  when not b\n  b == False{}\n\nlaw length(xs: List<&2, Nat>):\n  List.length(xs) == List.length(&2, Nat, xs)\n";
     writeFileSync(join(dir, "LAWS.law"), source);
     const output = await build(join(dir, "LAWS.law"));
-    const { runFile } = await import("../src/check/run.ts");
     const results = (await runFile(output, { n: 50, seed: 42, time: 5 })).results;
     expect(results.map(r => r.status)).toEqual(["fail", "pass", "pass"]);
     expect(results[0].bindings).toEqual({ n: "1n" });
@@ -107,7 +106,6 @@ test("law imports through symlinks resolve to the compiled helper", async () => 
     symlinkSync("helper.law", join(dir, "alias.law"));
     writeFileSync(join(dir, "LAWS.law"), "import Base\nimport ./alias.law as H\nlaw value:\n  H.value() == 1n\n");
     const output = await build(join(dir, "LAWS.law"));
-    const { runFile } = await import("../src/check/run.ts");
     expect((await runFile(output, { n: 10, seed: 42, time: 5 })).results[0].status).toBe("pass");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -147,7 +145,6 @@ test("import aliases may have names inherited by JavaScript objects", async () =
     for (const alias of ["constructor", "toString", "__proto__"]) {
       writeFileSync(join(dir, "source.law"), `import Base\nimport ./helper.bend as ${alias}\nlaw same:\n  ${alias}.value() == 1n\n`);
       const output = await build(join(dir, "source.law"));
-      const { runFile } = await import("../src/check/run.ts");
       expect((await runFile(output, { n: 1, seed: 42, time: 5 })).results[0].status).toBe("pass");
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }

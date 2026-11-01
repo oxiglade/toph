@@ -3,7 +3,8 @@ import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { B } from "../bend.ts";
-import { desugarMapped, Fields } from "./desugar.ts";
+import { desugarMapped } from "./desugar.ts";
+import { Fields } from "./fields.ts";
 import { parseModule } from "./parser.ts";
 import { bendError, concat, mapped, originAt, sliceMapped, SourceError, type Mapped } from "./source.ts";
 

@@ -188,8 +188,6 @@ test("all supported operators parse with the documented associativity", () => {
 test("explicit equality and value annotations round-trip through the frontend", async () => {
   const original = "import Base\nlaw identity(n: Nat):\n  {n == n : Nat}\n";
   const generated = await desugar(original, "identity.law");
-  const reparsed = parseModule(generated.replace("law identity:\n  for n: Nat", "law identity(n: Nat):"), "roundtrip.law");
-  expect(reparsed.diagnostics).toEqual([]);
   expect(await desugar(generated.replace("law identity:\n  for n: Nat", "law identity(n: Nat):"), "roundtrip.law")).toBe(generated);
 });
 

@@ -22,10 +22,9 @@ export async function audit(original: string, generated: string) {
   }
   return Object.entries(rename).map(([newName, oldName]) => {
     const newer = book.tlds[newName], older = book.tlds[oldName];
-    if (!older || !newer) throw new Error("missing audit definition: " + newName);
+    if (!older) throw new Error("missing audit definition: " + newName);
     const sameType = B.term_compare("EQ", book, older.T, B.term_higher(rebase(B.term_lower(newer.T))));
-    const rebased = newer.v === null ? null : rebase(B.term_lower(newer.v));
-    const sameBody = rebased === null ? null : older.v !== null && B.term_compare("EQ", book, older.v, B.term_higher(rebased));
+    const sameBody = newer.v === null ? null : older.v !== null && B.term_compare("EQ", book, older.v, B.term_higher(rebase(B.term_lower(newer.v))));
     return { newName, oldName, sameType, sameBody };
   });
 }

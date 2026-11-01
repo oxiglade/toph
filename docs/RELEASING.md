@@ -13,12 +13,10 @@ Bend's Lean backend; it requires BendTT and Lean on the configured path.
 - `toph-<version>-linux-arm64`
 
 The version comes from `package.json`. x64 targets use Bun's baseline CPU
-builds. Linux targets use glibc. Each binary embeds the checking worker and
-Bend compiler assets; running `check` or `build` requires Bend 2.0.39 on PATH.
+builds. Linux targets use glibc. Each binary embeds the checking worker and Bend compiler assets.
 The binaries are not Developer ID signed or notarized.
 
-`SHA256SUMS` contains SHA-256 hashes and relative filenames. Verify it inside
-`dist/release` with `shasum -a 256 -c SHA256SUMS` on macOS or
+Verify `SHA256SUMS` inside `dist/release` with `shasum -a 256 -c SHA256SUMS` on macOS or
 `sha256sum -c SHA256SUMS` on Linux. Cross-compilation does not test whether a
 binary runs on the target platform.
 
@@ -38,9 +36,9 @@ Set the intended version in `package.json`, commit it with passing tests,
 and create and push the matching `v<version>` tag. The release workflow runs
 the tests on both systems, builds all four binaries, verifies the checksums,
 and attaches them and `SHA256SUMS` to a GitHub release. A tag that disagrees
-with `package.json` fails before building. The initial version is `v0.1.0`.
+with `package.json` fails before building.
 
 When updating Bend, update the devenv pin and lock together, refresh the vendor
-tree with `bun run vendor:bend vX.Y.Z`, and update the documented requirement.
+tree with `bun scripts/vendor-bend.ts vX.Y.Z`, and update the documented requirement.
 When updating Bun, update `.bun-version` alongside the devenv lock and verify
 all release targets.

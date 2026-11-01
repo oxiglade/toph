@@ -7,15 +7,15 @@ const errorText = (error: any): string => error?.$ === "Err" ? B.err_show(error)
 export type Source = { file: string; text: string };
 export type Span = { source: Source; start: number; end: number };
 export type Diagnostic = { message: string; span: Span };
-export type Mapping = { start: number; end: number; origin: Span };
+type Mapping = { start: number; end: number; origin: Span };
 export type Mapped = { text: string; mappings: Mapping[]; namespace?: string };
 
-export function location(span: Span): string {
+function location(span: Span): string {
   const before = span.source.text.slice(0, span.start).split("\n");
   return `${span.source.file}:${before.length}:${before.at(-1)!.length + 1}`;
 }
 
-export function excerpt(span: Span): string {
+function excerpt(span: Span): string {
   const before = span.source.text.slice(0, span.start).split("\n");
   const line = before.length, column = before.at(-1)!.length;
   const text = span.source.text.split("\n")[line - 1].replace(/\r$/, "");
@@ -60,7 +60,7 @@ export function originAt(output: Mapped, start: number, end = start + 1): Span |
   if (start === output.text.length) return output.mappings.at(-1)?.origin;
   const candidates = output.mappings.filter(m => m.start < end && m.end > start);
   candidates.sort((a, b) => (a.origin.end - a.origin.start) - (b.origin.end - b.origin.start));
-  return candidates[0]?.origin ?? output.mappings.find(m => m.start <= start && m.end > start)?.origin;
+  return candidates[0]?.origin;
 }
 
 export function sliceMapped(output: Mapped, start: number, end: number): Mapped {

@@ -6,7 +6,7 @@ const exitCodes = `Exit codes:
   2  Invalid arguments, input/Bend/build error, or an unknown, vacuous or timed-out
      check with no counterexample.`;
 
-export const checkHelp = `Usage: toph check <LAWS.bend|LAWS.law> [options]
+const checkUsage = `Usage: toph check <LAWS.bend|LAWS.law> [options]
 Sample laws and shrink counterexamples. Sampling is not a proof.
 
 Options:
@@ -24,20 +24,19 @@ Options:
   --help               Show this help; use without an input file.
 
 Closed claims run once. U32/F32 generation retains machine boundaries.
-.law input is compiled in a temporary directory.
+.law input is compiled in a temporary directory.`;
 
-${exitCodes}`;
-
-export const buildHelp = `Usage: toph build <LAWS.law> [-o out.bend]
+const buildUsage = `Usage: toph build <LAWS.law> [-o out.bend]
 Compile and validate .law source as Bend.
 
 Options:
   -o FILE  Output .bend file (default: input path with .law replaced by .bend).
            Imported .law helpers, field projections and source maps are written
            beside the output as needed.
-  --help   Show this help; use without an input file.
+  --help   Show this help; use without an input file.`;
 
-${exitCodes}`;
+export const checkHelp = checkUsage + "\n\n" + exitCodes;
+export const buildHelp = buildUsage + "\n\n" + exitCodes;
 
 export const help = `Toph samples Bend laws and compiles .law source.
 
@@ -50,6 +49,8 @@ Commands:
 With no arguments, show this help. check and build require the matching Bend
 version on PATH. Help and version do not require Bend.
 
-${checkHelp}
+${checkUsage}
 
-${buildHelp}`;
+${buildUsage}
+
+${exitCodes}`;

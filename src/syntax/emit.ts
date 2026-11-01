@@ -1,7 +1,7 @@
 import type { Expr, Ty } from "./ast.ts";
 import { at, concat, joinMapped, mapped, type Mapped } from "./source.ts";
 
-export const verbs: Record<string, string> = { "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "<": "is_lt", "<=": "is_le", ">": "is_gt", ">=": "is_ge" };
+const verbs: Record<string, string> = { "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "<": "is_lt", "<=": "is_le", ">": "is_gt", ">=": "is_ge" };
 
 export function emit(n: Expr, format: (t: Ty) => string): Mapped {
   return at(n.span, () => {

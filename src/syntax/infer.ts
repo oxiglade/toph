@@ -18,7 +18,7 @@ export function unify(a: Ty, b: Ty) {
   a.args.forEach((x, i) => unify(x, b.args[i]));
 }
 export class Context {
-  book = B.book_nil(); aliases: Record<string, string> = Object.create(null); projections = new Map<string, string>();
+  book = B.book_nil(); aliases: Record<string, string> = Object.create(null); projections = new Set<string>();
   constructor(readonly fields: Fields) {}
   fromB(t: any, vars = new Map<number, Ty>()): Ty {
     t = B.term_force(t);
@@ -27,10 +27,9 @@ export class Context {
       return vars.get(t.i)!;
     }
     if (t.$ === "Ref" || t.$ === "ADT") return type(t.k, ...(t.x ?? []).map((x: any) => this.fromB(x, vars)));
-    if (t.$ === "Lit") return type(B.term_show(B.term_lower(t)));
+    if (t.$ === "Lit" || t.$ === "Qua") return type(B.term_show(B.term_lower(t)));
     if (t.$ === "Eql") return type("Equality", this.fromB(t.a, vars), this.fromB(t.b, vars), this.fromB(t.T, vars));
     if (t.$ === "Ctr") return type("Construct", type(t.k), ...t.x.map((x: any) => this.fromB(x, vars)));
-    if (t.$ === "Qua") return type(B.term_show(B.term_lower(t)));
     if (t.$ === "Typ") return type("Kind");
     if (t.$ === "Qnt") return type("Quant");
     if (t.$ === "All") return type("Fn", this.fromB(t.A, vars), this.fromB(t.B(B.Var(t.k, t.i)), vars));
@@ -60,8 +59,7 @@ export class Context {
     return this.name(t.name) + (t.args.length ? "<" + t.args.map(x => this.format(x)).join(", ") + ">" : "");
   }
   value(n: Node, env: Map<string, Ty>): Ty {
-    if (n.tag === "group") return this.value(n.xs[0], env);
-    if (n.tag === "+") return this.value(n.xs[0], env);
+    if (n.tag === "group" || n.tag === "+") return this.value(n.xs[0], env);
     if (n.tag === "ctor") return type("Construct", type(this.key(n.xs[0].text)), ...n.xs.slice(1).map(x => this.value(x, env)));
     if (n.tag === "ann" && n.xs[0].tag === "op" && ["==", "!="].includes(n.xs[0].text)) return this.value(n.xs[0], env);
     if (n.tag === "op" && ["==", "!="].includes(n.text)) {
@@ -72,7 +70,7 @@ export class Context {
     if (n.tag === "generic") return type(this.key(n.text), ...(n.implicit ?? []), ...n.xs.map(x => this.value(x, env)));
     if (n.tag === "call") return type("Apply", ...n.xs.map(x => this.value(x, env)));
     if (n.tag === "op" && ["&", "->"].includes(n.text)) return type(n.text === "&" ? "Pair" : "Fn", ...n.xs.map(x => this.value(x, env)));
-    if (n.prop || n.ty && head(n.ty) === "Kind") return type(this.emit(n));
+    if (n.prop || n.ty && head(n.ty) === "Kind") return type(emit(n, t => this.format(t)).text);
     throw new Error("unsupported type value: " + n.tag);
   }
   signature(k: string, constructor = false) {
@@ -107,17 +105,14 @@ export class Context {
       else if (/^\d+$/.test(n.text)) t = type("U32");
       else if (n.text.startsWith('"')) t = type("String");
       else if (/^&[012]$/.test(n.text)) t = type("Quant");
-      else if (n.text === "Quant") t = type("Kind");
-      else if (["Type", "Data"].includes(n.text)) t = type("Kind");
+      else if (["Quant", "Type", "Data"].includes(n.text)) t = type("Kind");
       else { const s = this.signature(this.key(n.text)); t = s.params.reduceRight((r, p) => type("Fn", p.ty, r), s.ret); }
     } else if (["call", "ctor", "generic"].includes(n.tag)) {
       const name = n.tag === "generic" ? n.text : n.xs[0].text;
       const args = n.tag === "generic" ? n.xs : n.xs.slice(1);
-      if (n.tag === "call" && (n.xs[0].tag !== "name" || name.includes(".") && env.has(name.split(".")[0]))) {
-        t = infer(n.xs[0]);
-        for (const x of args) { const a = fresh(), b = fresh(); unify(t, type("Fn", a, b)); infer(x, a); t = b; }
-      } else if (env.has(name)) {
-        t = env.get(name)!;
+      const local = n.tag === "call" && (n.xs[0].tag !== "name" || name.includes(".") && env.has(name.split(".")[0])) ? infer(n.xs[0]) : env.get(name);
+      if (local) {
+        t = local;
         for (const x of args) { const a = fresh(), b = fresh(); unify(t, type("Fn", a, b)); infer(x, a); t = b; }
       } else {
         const s = this.signature(this.key(name), n.tag === "ctor");
@@ -159,7 +154,7 @@ export class Context {
           this.aliases[name] === undefined ? match : this.fields.alias(this.aliases[name]) + ".");
       };
       const definition = `def ${name}(value: ${canonical(this.format(receiver))}) -> ${canonical(this.format(t))}:\n  ${canonical(this.name(ctor.k))}{${fields.join(", ")}} = value\n  ${fields[index]}\n`;
-      this.fields.definitions.set(name, definition); if (!this.fields.origins.has(name)) this.fields.origins.set(name, n.span); this.projections.set(name, definition);
+      this.fields.definitions.set(name, definition); if (!this.fields.origins.has(name)) this.fields.origins.set(name, n.span); this.projections.add(name);
     } else if (n.tag === "tuple") {
       const ts = n.xs.map(() => fresh());
       t = ts.reduceRight((r, x, i) => i === ts.length - 1 ? x : type("Pair", x, r));
@@ -216,8 +211,7 @@ export class Context {
     return at(n.span, () => this.patternNode(n, t, env));
   }
   patternNode(n: Node, t: Ty, env: Map<string, Ty>) {
-    if (n.tag === "group") return this.pattern(n.xs[0], t, env);
-    if (n.tag === "+") return this.pattern(n.xs[0], t, env);
+    if (n.tag === "group" || n.tag === "+") return this.pattern(n.xs[0], t, env);
     if (n.tag === "name" && /^[A-Za-z_]\w*$/.test(n.text)) { if (n.text !== "_") env.set(n.text, t); return; }
     if (n.tag === "succ") { unify(t, type("Nat")); return this.pattern(n.xs[0], t, env); }
     if (n.tag === "op" && n.text === "<>") {
@@ -241,5 +235,4 @@ export class Context {
     }
     this.infer(n, env, t);
   }
-  emit(n: Node): string { return emit(n, t => this.format(t)).text; }
 }

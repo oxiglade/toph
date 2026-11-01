@@ -305,13 +305,10 @@ version-1 interval map, not the JavaScript source-map format:
   owning expression or binder. Getter bodies map to the first field access
   requesting that getter. EOF errors use the final mapping.
 
-The shared Bend error formatter also loads saved maps in the checking
-worker, so later Bend errors retain their origins. Both `build` validation
-and `check file.law` use the maps before removing
-any temporary output. Bend's import-line removal is accounted for, and
-module identity distinguishes equal generated texts from different files.
-Bend errors include the original source and generated Bend context.
-Quantity errors may point to a binder, as Bend's own checker does.
+Bend errors in generated code point at the `.law` source and show the generated
+Bend context, during `build`, `check file.law`, and later checks of a generated
+`.bend` that still has its map. Quantity errors may point to a binder, as Bend's
+own checker does.
 
 For example, an inference failure is printed as:
 
@@ -324,13 +321,10 @@ bad.law:3:9: type mismatch: Bool / Nat
 Syntax recovery synchronizes at statement and declaration boundaries and
 collects several errors in a file. Inference collects errors across
 independent declarations; it stops within a failing declaration. Bend
-validation reports its first error. Unresolved inferred types point at the
-expression requiring them; unused parameters point at their binder.
+validation reports its first error. Unresolved inferred types point at the expression requiring them.
 
 This frontend does not accept all Bend syntax. Put ADT declarations,
 proofs, foreign/unsafe definitions, template binders, `do` blocks, rewrites,
 reflection escapes, array syntax, bitwise operators and literal forms not
 listed above in imported `.bend` files. Helper signatures must be explicit
 Bend types; use `{a == b : T}` for an equality in a helper signature.
-General dependent inference and normalization remain outside the grammar's
-type-inference contract.

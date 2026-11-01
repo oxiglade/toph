@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export function cli(args: string[], env = process.env) {
+function cli(args: string[], env = process.env) {
   const result = Bun.spawnSync([process.execPath, join(import.meta.dir, "../src/cli.ts"), ...args], { env });
   return { code: result.exitCode, out: result.stdout.toString(), err: result.stderr.toString() };
 }
