@@ -230,3 +230,57 @@ law call:
 law call:
   {1n == 1n : Nat}
 `, dir => writeFileSync(join(dir, "records.bend"), "import Base\ntype Action is Type:\n  Action{run: Nat -> Nat}\n")));
+
+test("quantity-marked patterns, lambdas and erased locals audit", () => compare(`
+def repeat(xs: +List<Nat>) -> Nat:
+  match xs:
+    case []: 0n
+    case +x <> rest: x + x
+def apply(f: @+x: Nat -> Nat, n: Nat) -> Nat:
+  f(n)
+def twice(n: Nat) -> Nat:
+  -ignored: Nat = 0n
+  apply(+x => x + x, n)
+law witnesses:
+  exs n: Nat
+  n == n
+law quantified:
+  @-n: Nat -> n == n
+`, `
+def repeat(xs: +List<Nat>) -> Nat:
+  match xs:
+    case []: 0n
+    case +x <> rest: Nat.add(x, x)
+def apply(f: @+x: Nat -> Nat, n: Nat) -> Nat:
+  f(n)
+def twice(n: Nat) -> Nat:
+  -ignored: Nat = 0n
+  apply(+x => Nat.add(x, x), n)
+law witnesses:
+  exs n: Nat
+  {n == n : Nat}
+law quantified:
+  @-n: Nat -> {n == n : Nat}
+`));
+
+test("uppercase names bind in assignments and patterns", () => compare(`
+def identity(n: Nat) -> Nat:
+  N = n
+  N
+def head(xs: List<Nat>) -> Nat:
+  match xs:
+    case []: 0n
+    case N <> Tail: N
+law binding:
+  identity(1n) == head([1n])
+`, `
+def identity(n: Nat) -> Nat:
+  N = n
+  N
+def head(xs: List<Nat>) -> Nat:
+  match xs:
+    case []: 0n
+    case N <> Tail: N
+law binding:
+  {identity(1n) == head([1n]) : Nat}
+`));

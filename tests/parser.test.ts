@@ -59,3 +59,9 @@ test("tuples require two elements and type arguments accept a trailing comma", (
   expect(parseModule("law bad:\n  (0n,) == 0n\n", "tuple.law").diagnostics.length).toBeGreaterThan(0);
   expect(parseModule("law list(xs: List<Nat,>):\n  xs == xs\n", "list.law").diagnostics).toEqual([]);
 });
+
+test("existentials keep Bend's affine quantity", () => {
+  for (const body of ["exs +n: Nat\n  n == n", "exs -n: Nat\n  n == n", "&+n: Nat -> n == n"]) {
+    expect(parseModule("law witness:\n  " + body + "\n", "witness.law").diagnostics.length).toBeGreaterThan(0);
+  }
+});

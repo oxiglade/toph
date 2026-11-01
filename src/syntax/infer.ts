@@ -218,7 +218,7 @@ export class Context {
   patternNode(n: Node, t: Ty, env: Map<string, Ty>) {
     if (n.tag === "group") return this.pattern(n.xs[0], t, env);
     if (n.tag === "+") return this.pattern(n.xs[0], t, env);
-    if (n.tag === "name" && /^[a-z_]\w*$/.test(n.text)) { if (n.text !== "_") env.set(n.text, t); return; }
+    if (n.tag === "name" && /^[A-Za-z_]\w*$/.test(n.text)) { if (n.text !== "_") env.set(n.text, t); return; }
     if (n.tag === "succ") { unify(t, type("Nat")); return this.pattern(n.xs[0], t, env); }
     if (n.tag === "op" && n.text === "<>") {
       const a = fresh(); unify(t, type("List", fresh(), a));

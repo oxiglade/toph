@@ -86,6 +86,7 @@ class Parser {
       if (token.text === "&" && this.current.kind === "number" && ["0", "1", "2"].includes(this.current.text)) {
         n = this.node("name", "&" + this.current.text, start); this.i++; n.span = this.span(start);
       } else {
+        if (token.text === "&" && (this.is("+") || this.is("-"))) this.fail("existential binders are affine; omit the quantity");
         const quant = this.take("+") ? "+" : this.take("-") ? "-" : "";
         const name = this.name().text; this.need(":"); const ty = this.expr(3); this.need("->");
         n = this.node("bind", token.text + quant + name, start, ty, this.expr(2));
@@ -158,6 +159,7 @@ class Parser {
             premises.push(this.expr());
           } else if (this.take("exs")) {
             if (phase > 1) this.fail("exs must precede the conclusion");
+            if (this.is("+") || this.is("-")) this.fail("existential binders are affine; omit the quantity");
             phase = 1; const p = this.parameter(true);
             if ([...parameters, ...witnesses].some(x => x.name === p.name)) this.fail("duplicate binder: " + p.name, p.span);
             witnesses.push(p);
