@@ -6,7 +6,8 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.kind === "load") {
       program = await load(data.file);
-      postMessage({ kind: "ready", laws: program.laws, loadMs: program.loadMs });
+      postMessage({ kind: "ready", laws: program.laws,
+        closed: program.laws.filter(name => program.book.tlds[name].n === 0), loadMs: program.loadMs });
     } else {
       postMessage({ kind: "result", result: checkLaw(program, data.law, data.options) });
     }

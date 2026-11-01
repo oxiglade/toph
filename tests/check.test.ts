@@ -45,6 +45,25 @@ test("F32 equality uses Bend bits and IO equality stops before evaluating progra
   expect(report.results[3].reason).toContain("IO");
 });
 
+test("accepted targets stop sampling early and sparse attempts do not become passes", async () => {
+  const program = await load(fixture("budgets"));
+  const opts = { ...options, n: 1000, samples: 20 };
+  expect(checkLaw(program, "identity", opts).accepted).toBe(20);
+  expect(checkLaw(program, "closed", opts).attempted).toBe(1);
+  const sparse = checkLaw(program, "sparse", { ...opts, n: 30 });
+  expect(sparse.status).toBe("unknown");
+  expect(sparse.accepted).toBeLessThan(20);
+  expect(sparse.reason).toContain("target");
+});
+
+test("the file budget runs cheap laws before spending the remainder on a loop", async () => {
+  const completed: string[] = [];
+  const report = await runFile(fixture("loop"), { ...options, time: 10, fileTime: 0.5 }, r => completed.push(r.law));
+  expect(report.results.map(r => r.status)).toEqual(["timeout", "pass"]);
+  expect(completed[0]).toBe("following");
+  expect(report.wallMs).toBeLessThan(1200);
+}, 3000);
+
 test("false laws produce small counterexamples that replay without acceleration", async () => {
   const fast = await load(fixture("false"));
   const plain = await load(fixture("false"), false);
@@ -81,3 +100,22 @@ for (const demo of ["proof_insertion_sort", "app_pong_game_2d"]) {
     }
   });
 }
+
+test("false demo laws fail and every reported counterexample replays", async () => {
+  const report = await runFile(fixture("demo-false"), { ...options, n: 300 });
+  const plain = await load(fixture("demo-false"), false);
+  expect(report.results).toHaveLength(4);
+  for (const result of report.results) {
+    expect(result.status).toBe("fail");
+    expect(result.replayed).toBe(true);
+    expect(replayLaw(plain, result.law, result.witness!)).toBe("fail");
+  }
+});
+
+test("a counterexample whose plain replay times out is never reported", async () => {
+  const report = await runFile(fixture("replay-timeout"), { ...options, n: 1, time: 0.05 });
+  expect(["unknown", "timeout"]).toContain(report.results[0].status);
+  expect(report.results[0].witness).toBeUndefined();
+  expect(report.results[0].bindings).toBeUndefined();
+  expect(report.results[1].status).toBe("pass");
+});

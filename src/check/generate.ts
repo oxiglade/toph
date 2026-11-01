@@ -34,8 +34,8 @@ export class Generator {
   private string: string;
   private length: number;
   private nodes = 0;
-  constructor(private book: any, private rng: Random, private aligned: boolean) {
-    this.number = rng.pick([0, 1, 2, 3, 9, 10]);
+  constructor(private book: any, private rng: Random, private aligned: boolean, private size = 64) {
+    this.number = rng.pick([0, 1, 2, 3, 9, 10].filter(n => n <= size));
     this.string = rng.pick(["", "a", "b", "0"]);
     this.length = rng.pick([0, 1, 1, 2, 3, 4]);
   }
@@ -55,7 +55,8 @@ export class Generator {
       const boundaries = t.k === "Nat"
         ? [0, 1, 2, 3, 4, 8, 9, 10, 11, 16, 31, 32, 63, 64]
         : [0, 1, 2, 3, 9, 10, 255, 256, 65535, 65536, 2147483647, 2147483648, 4294967294, 4294967295];
-      v = B.Lit(t.k, this.aligned ? this.number : this.rng.pick(boundaries));
+      v = B.Lit(t.k, this.aligned ? this.number : this.rng.pick(t.k === "Nat"
+        ? [...boundaries.filter(n => n <= this.size), Math.floor(this.rng.next() * (this.size + 1))] : boundaries));
     } else if (t.k === "F32") {
       v = B.Lit("F32", this.rng.pick([0, 0x80000000, 1, 0x80000001,
         0x007fffff, 0x00800000, 0x7f7fffff, 0xff7fffff, 0x7f800000, 0xff800000,
@@ -65,7 +66,7 @@ export class Generator {
     } else if (t.k === "Char") {
       v = B.Ctr("Chr", [B.Lit("U32", this.rng.pick([0, 32, 48, 97, 98, 233, 128578]))]);
     } else if (t.k === "List") {
-      const n = depth > 4 ? 0 : this.aligned ? this.length : this.rng.pick([0, 1, 1, 2, 2, 3, 4, 6]);
+      const n = depth > 4 ? 0 : Math.min(this.size, this.aligned ? this.length : this.rng.pick([0, 1, 1, 2, 2, 3, 4, 6]));
       v = B.Ctr("Nil", []);
       for (let i = 0; i < n; i++) v = B.Ctr("Con", [this.value(t.x[1], depth + 1), v]);
     } else {
@@ -78,7 +79,7 @@ export class Generator {
 
   private construct(t: Extract<Term, { $: "ADT" }>, depth: number): Term {
     const constructors = this.book.tlds[t.k].c.filter((c: any) => !t.r.includes(c.k))
-      .map((c: any) => ({ c, order: this.rng.next(), rank: depth > 4
+      .map((c: any) => ({ c, order: this.rng.next(), rank: depth >= Math.min(4, this.size)
         ? fields(this.book, t, c.k).reduce((n: number, f: Term) => n + this.height(f, new Set([t.k])), 0) : 0 }))
       .sort((a: any, b: any) => a.rank - b.rank || a.order - b.order);
     let reason = "no constructors";

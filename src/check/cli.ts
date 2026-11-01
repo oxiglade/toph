@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "../syntax/build.ts";
 
-export const usage = "toph check <LAWS.bend|LAWS.law> [--law NAME] [--n N] [--seed S] [--time SECONDS] [--json]";
+export const usage = "toph check <LAWS.bend|LAWS.law> [--law NAME] [--n ATTEMPTS] [--samples ACCEPTED] [--size N] [--seed S] [--time SECONDS] [--file-time SECONDS] [--json]\nDefaults: 3000 attempts, 100 accepted samples, size 4, seed 42, 10s per law, 30s per file. Size bounds generated naturals and collections; U32/F32 retain machine boundaries.";
 
 export function format(r: Result): string {
   const share = r.attempted ? (100 * r.accepted / r.attempted).toFixed(1) : "0.0";
@@ -24,21 +24,22 @@ export async function main(args: string[]) {
   if (args.length === 0 || args[0] === "--help") { console.log(usage); return 0; }
   if (args.shift() !== "check" || !args[0] || args[0].startsWith("--")) throw new Error(usage);
   const file = args.shift()!;
-  const options: Options & { law?: string } = { n: 3000, seed: 42, time: 10 };
+  const options: Options & { law?: string } = { n: 3000, samples: 100, size: 4, seed: 42, time: 10, fileTime: 30 };
   let json = false;
   while (args.length) {
     const flag = args.shift()!;
     if (flag === "--json") { json = true; continue; }
-    if (!["--law", "--n", "--seed", "--time"].includes(flag)) throw new Error("unknown option: " + flag);
+    if (!["--law", "--n", "--samples", "--size", "--seed", "--time", "--file-time"].includes(flag)) throw new Error("unknown option: " + flag);
     const value = args.shift();
     if (!value || value.startsWith("--")) throw new Error("missing value for " + flag);
     if (flag === "--law") { options.law = value; continue; }
     const n = Number(value);
-    if (!Number.isFinite(n) || (flag === "--time" ? n <= 0 : !Number.isSafeInteger(n))
-      || (flag === "--n" && n <= 0) || (flag === "--seed" && (n < 0 || n > 0xffffffff))) {
+    if (!Number.isFinite(n) || (["--time", "--file-time"].includes(flag) ? n <= 0 : !Number.isSafeInteger(n))
+      || (["--n", "--samples"].includes(flag) && n <= 0)
+      || (["--seed", "--size"].includes(flag) && (n < 0 || n > 0xffffffff))) {
       throw new Error("invalid value for " + flag + ": " + value);
     }
-    options[flag.slice(2) as "n" | "seed" | "time"] = n;
+    options[flag === "--file-time" ? "fileTime" : flag.slice(2) as "n" | "seed" | "time" | "samples" | "size"] = n;
   }
   let temporary: string | undefined;
   let report: Awaited<ReturnType<typeof runFile>>;

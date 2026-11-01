@@ -4,7 +4,7 @@ import { Generator, Random, Unsupported, smaller, weight } from "./generate.ts";
 import { accelerate } from "./naturals.ts";
 import { Constraints, type Variable } from "./constraints.ts";
 
-export type Options = { n: number; seed: number; time: number };
+export type Options = { n: number; seed: number; time: number; samples?: number; fileTime?: number; size?: number };
 export type Program = { book: any; originalBook: any; laws: string[]; loadMs: number };
 export type Result = {
   law: string; status: "pass" | "fail" | "vacuous" | "unknown" | "timeout";
@@ -29,7 +29,9 @@ export async function load(file: string, fast = true): Promise<Program> {
   return { book: fast ? await accelerate(book) : book, originalBook: book, laws, loadMs: performance.now() - start };
 }
 
-class Deadline extends Error {}
+class Deadline extends Error {
+  constructor() { super("per-law time budget exhausted"); }
+}
 
 class Evaluation {
   constructor(readonly book: any, readonly until: number) {}
@@ -257,15 +259,23 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
   const start = performance.now();
   const ev = new Evaluation(program.book, start + options.time * 1000);
   const rng = new Random(lawSeed(options.seed, name));
+  const target = Math.min(options.n, options.samples ?? options.n);
   const result: Result = { law: name, status: "pass", attempted: 0, accepted: 0, elapsedMs: 0, seed: options.seed };
   try {
     for (let i = 0; i < options.n; i++) {
       ev.tick();
       result.attempted++;
-      const sample = instance(program, name, ev, new Generator(program.book, rng, i % 5 === 0));
+      const sample = instance(program, name, ev,
+        new Generator(program.book, rng, i % 5 === 0, i % ((options.size ?? 4) + 1)));
       if (!sample.accepted) continue;
       result.accepted++;
-      if (sample.decision!.ok) continue;
+      if (sample.decision!.ok) {
+        if (program.book.tlds[name].n === 0 || result.accepted >= target) {
+          result.reason = program.book.tlds[name].n === 0 ? "closed claim evaluated once" : "accepted sample target reached";
+          break;
+        }
+        continue;
+      }
       result.status = "fail";
       result.firstFailureMs = performance.now() - start;
       let bindings = sample.bindings;
@@ -315,6 +325,12 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
       break;
     }
     if (result.status === "pass" && result.accepted === 0) result.status = "vacuous";
+    else if (result.status === "pass" && options.samples !== undefined
+      && result.accepted < target && program.book.tlds[name].n !== 0) {
+      result.status = "unknown";
+      result.reason = "attempt limit reached before accepted sample target";
+    }
+    if (result.status === "pass" && !result.reason) result.reason = "attempt limit reached";
   } catch (e) {
     result.status = e instanceof Deadline ? "timeout" : "unknown";
     result.reason = errorText(e);
