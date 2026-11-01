@@ -13,5 +13,4 @@ export class Fields {
     return concat(mapped("import Base\n" + [...this.namespaces].map(([ns, alias]) => `import ./${ns}.bend as ${alias}`).join("\n") + "\n\n", origin),
       ...[...this.definitions].map(([name, text]) => mapped(text + "\n", this.origins.get(name)!)));
   }
-  source(): string { return this.mapped().text; }
 }

@@ -111,3 +111,29 @@ test("law imports through symlinks resolve to the compiled helper", async () => 
     expect((await runFile(output, { n: 10, seed: 42, time: 5 })).results[0].status).toBe("pass");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("build refuses source-map symlinks to source files before writing outputs", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-map-link-")));
+  try {
+    const input = join(dir, "source.law"), output = join(dir, "generated.bend");
+    const source = "import Base\nlaw identity(n: Nat):\n  n == n\n";
+    writeFileSync(input, source);
+    symlinkSync(input, output + ".map.json");
+    await expect(build(input, output)).rejects.toThrow("overwrite an input");
+    expect(readFileSync(input, "utf8")).toBe(source);
+    expect(existsSync(output)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("import aliases may have names inherited by JavaScript objects", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-alias-")));
+  try {
+    writeFileSync(join(dir, "helper.bend"), "import Base\ndef value() -> Nat:\n  1n\n");
+    for (const alias of ["constructor", "toString", "__proto__"]) {
+      writeFileSync(join(dir, "source.law"), `import Base\nimport ./helper.bend as ${alias}\nlaw same:\n  ${alias}.value() == 1n\n`);
+      const output = await build(join(dir, "source.law"));
+      const { runFile } = await import("../src/check/run.ts");
+      expect((await runFile(output, { n: 1, seed: 42, time: 5 })).results[0].status).toBe("pass");
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

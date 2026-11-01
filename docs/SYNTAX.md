@@ -3,8 +3,7 @@
 Toph compiles a module of imports, typed helpers and laws into plain Bend
 2.0.39. It infers omitted law parameter types and leading erased call
 arguments from signatures and expression constraints. Bend checks the
-result before any output is written. The examples below are fresh; the
-integration fixtures also exercise six public Bend demos.
+result before any output is written.
 
 ## Grammar
 

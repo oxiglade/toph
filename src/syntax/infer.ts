@@ -18,7 +18,7 @@ export function unify(a: Ty, b: Ty) {
   a.args.forEach((x, i) => unify(x, b.args[i]));
 }
 export class Context {
-  book = B.book_nil(); aliases: Record<string, string> = {}; projections = new Map<string, string>();
+  book = B.book_nil(); aliases: Record<string, string> = Object.create(null); projections = new Map<string, string>();
   constructor(readonly fields: Fields) {}
   fromB(t: any, vars = new Map<number, Ty>()): Ty {
     t = B.term_force(t);

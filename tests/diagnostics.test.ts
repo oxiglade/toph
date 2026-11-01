@@ -68,6 +68,7 @@ test("source maps cover EOF and distinguish identical modules", async () => {
   const first = { ...mapped(text, { source: { file: "first.law", text }, start: 22, end: 23 }), namespace: "First" };
   const second = { ...mapped(text, { source: { file: "second.law", text }, start: 22, end: 23 }), namespace: "Second" };
   expect(originAt(second, text.length)?.source.file).toBe("second.law");
+  expect.assertions(2);
   try { B.parse_book(B.book_nil(), "", text, "Second", {}); }
   catch (error) { expect(bendError(error, [first, second]).message).toContain("second.law:2:3"); }
 });

@@ -53,9 +53,10 @@ export async function build(input: string, output = input.replace(/\.law$/, ".be
     B.book_valid(book);
     mkdirSync(dirname(output), { recursive: true });
     const directory = realpathSync(dirname(output));
-    for (const name of generated.keys()) {
+    const inputs = new Set([...seen.keys(), ...modules.keys()]);
+    for (const name of [...generated.keys()].flatMap(name => [name, name + ".map.json"])) {
       const destination = join(directory, name);
-      if (existsSync(destination) && seen.has(realpathSync(destination))) {
+      if (existsSync(destination) && inputs.has(realpathSync(destination))) {
         throw new Error("refusing to overwrite an input: " + destination);
       }
     }
