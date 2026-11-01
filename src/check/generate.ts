@@ -1,4 +1,5 @@
 import { B, show, type Term } from "../bend.ts";
+import { Constraints } from "./constraints.ts";
 
 export class Unsupported extends Error {}
 
@@ -32,13 +33,19 @@ export class Generator {
   private number: number;
   private string: string;
   private length: number;
+  private nodes = 0;
   constructor(private book: any, private rng: Random, private aligned: boolean) {
     this.number = rng.pick([0, 1, 2, 3, 9, 10]);
     this.string = rng.pick(["", "a", "b", "0"]);
     this.length = rng.pick([0, 1, 1, 2, 3, 4]);
   }
   value(type: Term, depth = 0): Term {
+    if (++this.nodes > 2000 || depth > 80) throw new Unsupported("generation size limit");
     const t = B.term_wnf(this.book, type);
+    if (t.$ === "Eql") {
+      if (B.term_compare("EQ", this.book, t.a, t.b)) return B.Rfl();
+      throw new Unsupported("constructor equality is not inhabited: " + show(t));
+    }
     if (t.$ !== "ADT") throw new Unsupported("cannot generate " + show(t));
     const key = show(t);
     const old = this.pool.get(key) ?? [];
@@ -58,39 +65,63 @@ export class Generator {
       v = B.Ctr("Nil", []);
       for (let i = 0; i < n; i++) v = B.Ctr("Con", [this.value(t.x[1], depth + 1), v]);
     } else {
-      const adt = this.book.tlds[t.k];
-      let constructors = adt.c.filter((c: any) => !t.r.includes(c.k));
-      if (depth > 5) {
-        const ranked = constructors.map((c: any) => ({ c, rank: fields(this.book, t, c.k).reduce(
-          (n: number, f: Term) => n + this.height(f, new Set([show(t)])), 0) }));
-        const best = Math.min(...ranked.map((x: any) => x.rank));
-        constructors = ranked.filter((x: any) => x.rank === best && Number.isFinite(best)).map((x: any) => x.c);
-      }
-      if (!constructors.length) throw new Unsupported("no bounded constructor for " + show(t));
-      const c = this.rng.pick<any>(constructors);
-      let tel = c.T;
-      for (const parameter of t.x) tel = B.tele_head(this.book, tel, B.ctx_nil()).B(parameter);
-      const values: Term[] = [];
-      for (let i = 0; i < c.n; i++) {
-        const all = B.tele_head(this.book, tel, B.ctx_nil());
-        const field = this.value(all.A, depth + 1);
-        values.push(field);
-        tel = all.B(field);
-      }
-      v = B.Ctr(c.k, values);
+      v = this.construct(t, depth);
     }
     old.push(v);
     this.pool.set(key, old);
     return v;
   }
 
+  private construct(t: Extract<Term, { $: "ADT" }>, depth: number): Term {
+    const constructors = this.book.tlds[t.k].c.filter((c: any) => !t.r.includes(c.k))
+      .map((c: any) => ({ c, order: this.rng.next(), rank: depth > 4
+        ? fields(this.book, t, c.k).reduce((n: number, f: Term) => n + this.height(f, new Set([t.k])), 0) : 0 }))
+      .sort((a: any, b: any) => a.rank - b.rank || a.order - b.order);
+    let reason = "no constructors";
+    for (const { c } of constructors) {
+      const constraints = new Constraints(this.book);
+      let tel = c.T;
+      for (const parameter of t.x) tel = B.tele_head(this.book, tel, B.ctx_nil()).B(parameter);
+      const slots = [];
+      for (let i = 0; i < c.n; i++) {
+        const all = B.tele_head(this.book, tel, B.ctx_nil());
+        const variable = constraints.variable(all.k);
+        slots.push({ type: all.A, variable });
+        tel = all.B(variable);
+      }
+      try {
+        for (const slot of slots) {
+          const type = B.term_wnf(this.book, slot.type);
+          if (type.$ === "Eql" && constraints.equal(type.a, type.b) === false) {
+            throw new Unsupported("incompatible constructor index");
+          }
+        }
+        const fill = (term: Term): Term => {
+          const value = B.term_wnf(this.book, term);
+          if (value.$ === "Var") {
+            const slot = slots.find(s => s.variable === value);
+            if (!slot) throw new Unsupported("unresolved constructor field");
+            value.v = this.value(slot.type, depth + 1);
+            return value.v;
+          }
+          return value.$ === "Ctr" ? B.Ctr(value.k, value.x.map(fill)) : value;
+        };
+        const value = B.Ctr(c.k, slots.map(s => fill(s.variable)));
+        return value;
+      } catch (e) {
+        if (!(e instanceof Unsupported)) throw e;
+        reason = e.message;
+      }
+    }
+    throw new Unsupported("no bounded constructor for " + show(t) + ": " + reason);
+  }
+
   private height(type: Term, seen: Set<string>): number {
     const t = B.term_wnf(this.book, type);
-    if (t.$ !== "ADT") return Infinity;
+    if (t.$ === "Eql") return 0;
+    if (t.$ !== "ADT" || seen.has(t.k)) return Infinity;
     if (["Nat", "U32", "String", "Char"].includes(t.k)) return 1;
-    const key = show(t);
-    if (seen.has(key)) return Infinity;
-    const next = new Set([...seen, key]);
+    const next = new Set([...seen, t.k]);
     return 1 + Math.min(...this.book.tlds[t.k].c.map((c: any) =>
       fields(this.book, t, c.k).reduce((n: number, f: Term) => n + this.height(f, next), 0)));
   }
