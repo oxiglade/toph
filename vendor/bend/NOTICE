@@ -1,0 +1,13 @@
+Bend 2.0.39
+Source: https://github.com/bendlang/bend/tree/a3efe8a3801f423827424227172eed9802c5e6cb
+Tag: v2.0.39
+
+Copied bend2/{bend.ts,comp.ts,main.ts,safe.ts,base.bend} and LICENSE.
+Bend is licensed under Apache-2.0; see LICENSE.
+
+Toph modifies bend.ts only to import base.bend as a Bun file asset and
+resolve BEND_DIR and BASE_BEND from that asset. This embeds Base in the
+standalone executable. All other copied files are unchanged.
+
+Refresh: bun scripts/vendor-bend.ts v2.0.39
+version.json records the commit, version and unmodified source hashes.

@@ -1,0 +1,12 @@
+{
+  "name": "toph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "bun test",
+    "build": "bun build --compile src/cli.ts src/check/worker.ts --outfile dist/toph",
+    "vendor:bend": "bun scripts/vendor-bend.ts"
+  }
+}
