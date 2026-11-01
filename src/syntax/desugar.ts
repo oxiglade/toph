@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { B } from "../bend.ts";
 type Ty = { name: string; args: Ty[] } | { id: number; link?: Ty };
@@ -303,8 +304,8 @@ const blocks = (s: string) => s.split(/(?=^(?:law|def) )/m);
 export async function desugar(source: string, file: string, outputDir = dirname(resolve(file)), fields = new Fields(), modules = new Map<string, string>()): Promise<string> {
   const ctx = new Context(fields), seen = new Map(), imports: string[] = [];
   for (const m of source.matchAll(/^import (\S+)(?: as (\w+))?/gm)) {
-    const target = m[1] === "Base" ? B.BASE_BEND
-      : modules.get(resolve(dirname(file), m[1])) ?? resolve(dirname(file), m[1]);
+    const imported = m[1] === "Base" ? B.BASE_BEND : realpathSync(resolve(dirname(file), m[1]));
+    const target = modules.get(imported) ?? imported;
     const ns = m[1] === "Base" ? "" : relative(outputDir, target).replace(/\.bend$/, "");
     await B.book_load(ctx.book, target, ns, seen, undefined, outputDir);
     if (m[2]) ctx.aliases[m[2]] = ns;

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { build } from "../src/syntax/build.ts";
@@ -72,5 +72,42 @@ test("build rejects cycles and does not overwrite an imported implementation", a
     writeFileSync(join(dir, "LAWS.law"), "import Base\nimport ./main.bend as M\nlaw same:\n  M.value() == 1n\n");
     await expect(build(join(dir, "LAWS.law"), join(dir, "main.bend"))).rejects.toThrow("overwrite an input");
     expect(readFileSync(join(dir, "main.bend"), "utf8")).toBe(implementation);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("premises, Boolean lifting and erased List arguments keep their meaning", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-premises-")));
+  try {
+    const source = "import Base\n\nlaw positive(+n):\n  when n > 0n\n  n == 0n\n\nlaw negative(b: Bool):\n  when not b\n  b == False{}\n\nlaw length(xs: List<&2, Nat>):\n  List.length(xs) == List.length(&2, Nat, xs)\n";
+    writeFileSync(join(dir, "LAWS.law"), source);
+    const output = await build(join(dir, "LAWS.law"));
+    const { runFile } = await import("../src/check/run.ts");
+    const results = (await runFile(output, { n: 50, seed: 42, time: 5 })).results;
+    expect(results.map(r => r.status)).toEqual(["fail", "pass", "pass"]);
+    expect(results[0].bindings).toEqual({ n: "1n" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("audit detects changed and missing laws", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-audit-negative-")));
+  try {
+    const original = join(dir, "original.bend"), generated = join(dir, "generated.bend");
+    writeFileSync(original, "import Base\nlaw value:\n  {0n == 0n : Nat}\n");
+    writeFileSync(generated, "import Base\nlaw value:\n  {0n == 1n : Nat}\n");
+    expect((await audit(original, generated))[0].sameType).toBe(false);
+    writeFileSync(generated, "import Base\n");
+    await expect(audit(original, generated)).rejects.toThrow("missing generated definition");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("law imports through symlinks resolve to the compiled helper", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-import-link-")));
+  try {
+    writeFileSync(join(dir, "helper.law"), "import Base\ndef value() -> Nat:\n  1n\n");
+    symlinkSync("helper.law", join(dir, "alias.law"));
+    writeFileSync(join(dir, "LAWS.law"), "import Base\nimport ./alias.law as H\nlaw value:\n  H.value() == 1n\n");
+    const output = await build(join(dir, "LAWS.law"));
+    const { runFile } = await import("../src/check/run.ts");
+    expect((await runFile(output, { n: 10, seed: 42, time: 5 })).results[0].status).toBe("pass");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
