@@ -1,9 +1,5 @@
 import { runFile } from "./run.ts";
 import type { Options, Result } from "./engine.ts";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { build } from "../syntax/build.ts";
 import { checkDefaults, checkHelp } from "../help.ts";
 import { checkBendVersion } from "../version.ts";
 
@@ -41,19 +37,8 @@ export async function main(args: string[]) {
     options[flag === "--file-time" ? "fileTime" : flag.slice(2) as "n" | "seed" | "time" | "samples" | "size"] = n;
   }
   checkBendVersion();
-  let temporary: string | undefined;
-  let report: Awaited<ReturnType<typeof runFile>>;
-  try {
-    let input = file;
-    if (file.endsWith(".law")) {
-      temporary = mkdtempSync(join(tmpdir(), "toph-check-"));
-      input = await build(file, join(temporary, "LAWS.bend"));
-    } else if (!file.endsWith(".bend")) throw new Error("check needs a .bend or .law file");
-    report = await runFile(input, options, json ? undefined : r => console.log(format(r)));
-    report.file = file;
-  } finally {
-    if (temporary) rmSync(temporary, { recursive: true, force: true });
-  }
+  if (!file.endsWith(".law") && !file.endsWith(".bend")) throw new Error("check needs a .bend or .law file");
+  const report = await runFile(file, options, json ? undefined : r => console.log(format(r)));
   if (json) console.log(JSON.stringify(report, null, 2));
   else console.log(`Checked ${report.results.length} laws in ${(report.wallMs / 1000).toFixed(3)}s (load/check ${(report.loadMs / 1000).toFixed(3)}s). Sampling is not a proof.`);
   return report.results.some(r => r.status === "fail") ? 1

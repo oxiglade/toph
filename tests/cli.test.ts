@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -67,3 +67,17 @@ test("build writes plain Bend and check accepts law source without writing besid
     expect(report.results[0].bindings).toEqual({ n: "0n" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("the file deadline interrupts law compilation and removes its temporary files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "toph-compile-deadline-"));
+  try {
+    writeFileSync(join(dir, "loop.bend"), "import Base\n@unsafe def spin() -> Type:\n  spin()\ndef problematic() -> spin():\n  0n\n");
+    writeFileSync(join(dir, "source.law"), "import Base\nimport ./loop.bend as L\nlaw ok:\n  Unit\n");
+    const result = Bun.spawnSync([process.execPath, join(import.meta.dir, "../src/cli.ts"),
+      "check", join(dir, "source.law"), "--file-time", "0.1"], { env: { ...process.env, TMPDIR: dir }, timeout: 3000 });
+    expect(result.exitCode).toBe(2);
+    expect(result.signalCode).toBeUndefined();
+    expect(result.stderr.toString()).toContain("time budget exhausted");
+    expect(readdirSync(dir).sort()).toEqual(["loop.bend", "source.law"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}, 5000);

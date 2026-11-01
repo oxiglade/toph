@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { build } from "../src/syntax/build.ts";
@@ -120,6 +120,21 @@ test("build refuses source-map symlinks to source files before writing outputs",
     writeFileSync(input, source);
     symlinkSync(input, output + ".map.json");
     await expect(build(input, output)).rejects.toThrow("overwrite an input");
+    expect(readFileSync(input, "utf8")).toBe(source);
+    expect(existsSync(output)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test.each(["hardlink", "dangling symlink", "directory"])("build rejects a source-map %s before writing outputs", async kind => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-map-alias-")));
+  try {
+    const input = join(dir, "source.law"), output = join(dir, "generated.bend"), map = output + ".map.json";
+    const source = "import Base\nlaw identity(n: Nat):\n  n == n\n";
+    writeFileSync(input, source);
+    if (kind === "hardlink") linkSync(input, map);
+    else if (kind === "dangling symlink") symlinkSync(output, map);
+    else mkdirSync(map);
+    await expect(build(input, output)).rejects.toThrow();
     expect(readFileSync(input, "utf8")).toBe(source);
     expect(existsSync(output)).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }

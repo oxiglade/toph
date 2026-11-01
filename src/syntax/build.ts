@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { B } from "../bend.ts";
@@ -7,12 +7,12 @@ import { desugarMapped, Fields } from "./desugar.ts";
 import { parseModule } from "./parser.ts";
 import { bendError, concat, mapped, originAt, sliceMapped, SourceError, type Mapped } from "./source.ts";
 
-export async function build(input: string, output = input.replace(/\.law$/, ".bend")): Promise<string> {
+export async function build(input: string, output = input.replace(/\.law$/, ".bend"), temporaryRoot = tmpdir()): Promise<string> {
   if (!input.endsWith(".law") || !output.endsWith(".bend")) throw new Error("build needs a .law input and a .bend output");
   input = realpathSync(input);
   output = resolve(output);
   if (!/^[A-Za-z_][\w-]*\.bend$/.test(basename(output))) throw new Error("output needs a Bend module filename (letters, digits, _ and -)");
-  const stage = realpathSync(mkdtempSync(join(tmpdir(), "toph-build-")));
+  const stage = realpathSync(mkdtempSync(join(temporaryRoot, "toph-build-")));
   const modules = new Map<string, string>();
   const active = new Set<string>();
   const prefix = basename(output, ".bend");
@@ -56,9 +56,12 @@ export async function build(input: string, output = input.replace(/\.law$/, ".be
     const inputs = new Set([...seen.keys(), ...modules.keys()]);
     for (const name of [...generated.keys()].flatMap(name => [name, name + ".map.json"])) {
       const destination = join(directory, name);
-      if (existsSync(destination) && inputs.has(realpathSync(destination))) {
-        throw new Error("refusing to overwrite an input: " + destination);
+      const entry = lstatSync(destination, { throwIfNoEntry: false });
+      if (!entry) continue;
+      if (entry.isSymbolicLink() || entry.nlink > 1 || inputs.has(realpathSync(destination))) {
+        throw new Error("refusing to overwrite an input or linked output: " + destination);
       }
+      if (!entry.isFile()) throw new Error("output is not a regular file: " + destination);
     }
     for (const [name, result] of generated) {
       const parts: Mapped[] = [];

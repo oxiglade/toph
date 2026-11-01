@@ -290,7 +290,8 @@ dependent field types and record updates are unsupported.
 projections, and validates the complete book. `.bend` imports retain Bend's
 meaning; generated import paths are relative to the output directory.
 Imported `.law` modules get deterministic companion names based on their
-relative paths. Cycles and overwriting an imported implementation are errors.
+relative paths. Cycles and overwriting an input are errors. Existing output
+files and maps must be regular files, without symbolic links or hardlinks.
 
 Each generated `.bend` has a `.bend.map.json` companion and a
 `# toph-map: <basename>.bend.map.json` comment identifying it. This is Toph's

@@ -18,7 +18,7 @@ Options:
                        (integer 0..4294967295; default: ${checkDefaults.size}).
   --seed S             Random seed (integer 0..4294967295; default: ${checkDefaults.seed}).
   --time SECONDS       Time budget per law (positive number; default: ${checkDefaults.time}).
-  --file-time SECONDS  Time budget per file, including load and scheduling
+  --file-time SECONDS  Time budget per file, including compilation, load and scheduling
                        (positive number; default: ${checkDefaults.fileTime}).
   --json               Print a JSON report (default: human-readable text).
   --help               Show this help; use without an input file.
