@@ -15,6 +15,9 @@ test("CLI reports version, selected counterexamples and invalid options", () => 
   expect(result.out).toContain("n = 1n");
   expect(result.out).not.toContain("successor_is_identity");
   expect(cli(["check", "missing.bend", "--n", "0"]).code).toBe(2);
+  for (const [flag, value] of [["--file-time", "0"], ["--samples", "0"], ["--size", "-1"]]) {
+    expect(cli(["check", "missing.bend", flag, value]).err).toContain("invalid value");
+  }
 });
 
 test("an incompatible Bend is refused before reading input", () => {
