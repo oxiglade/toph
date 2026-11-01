@@ -1,0 +1,6 @@
+Bend demo fixtures, Apache-2.0; see LICENSE.
+Source: https://github.com/bendlang/bend/tree/v2.0.39/demos
+Commit: a3efe8a3801f423827424227172eed9802c5e6cb
+
+The .bend files in these demo directories are copied unchanged from Bend.
+The .law files are Toph's rewrites of the corresponding LAWS.bend files.
