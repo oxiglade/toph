@@ -1,0 +1,8 @@
+import Base
+import ./main.bend as TE
+
+law opt_sound(t, e):
+  TE.eval(t, TE.opt(e)) == TE.eval(e)
+
+law opt_complete(-t, e):
+  TE.lit(t, TE.eval(e)) == TE.opt(e)

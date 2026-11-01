@@ -1,0 +1,19 @@
+import Base
+import ./main.bend as Num
+
+law add_comm(a, +b):
+  Num.add(a, b) == Num.add(b, a)
+
+law add_assoc(a, -b, -c):
+  Num.add(a, Num.add(b, c)) == Num.add(Num.add(a, b), c)
+
+law mul_comm(+a, +b):
+  Num.mul(a, b) == Num.mul(b, a)
+
+law mul_dist(a, -b, +c):
+  Num.add(Num.mul(a, c), Num.mul(b, c)) == Num.mul(Num.add(a, b), c)
+
+law divmod_ok(+n, +m):
+  exs q: Nat
+  exs r: Nat
+  (q, r) == Num.divmod(n, 1n+m) & True{} == r < 1n+m & n == Num.add(r, Num.mul(q, 1n+m))

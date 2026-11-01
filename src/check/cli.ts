@@ -1,5 +1,9 @@
 import { runFile } from "./run.ts";
 import type { Options, Result } from "./engine.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { build } from "../syntax/build.ts";
 
 export const usage = "toph check <LAWS.bend|LAWS.law> [--law NAME] [--n N] [--seed S] [--time SECONDS] [--json]";
 
@@ -36,7 +40,19 @@ export async function main(args: string[]) {
     }
     options[flag.slice(2) as "n" | "seed" | "time"] = n;
   }
-  const report = await runFile(file, options, json ? undefined : r => console.log(format(r)));
+  let temporary: string | undefined;
+  let report: Awaited<ReturnType<typeof runFile>>;
+  try {
+    let input = file;
+    if (file.endsWith(".law")) {
+      temporary = mkdtempSync(join(tmpdir(), "toph-check-"));
+      input = await build(file, join(temporary, "LAWS.bend"));
+    } else if (!file.endsWith(".bend")) throw new Error("check needs a .bend or .law file");
+    report = await runFile(input, options, json ? undefined : r => console.log(format(r)));
+    report.file = file;
+  } finally {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  }
   if (json) console.log(JSON.stringify(report, null, 2));
   else console.log(`Checked ${report.results.length} laws in ${(report.wallMs / 1000).toFixed(3)}s (load/check ${(report.loadMs / 1000).toFixed(3)}s). Sampling is not a proof.`);
   return report.results.some(r => r.status === "fail") ? 1

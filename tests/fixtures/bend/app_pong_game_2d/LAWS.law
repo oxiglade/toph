@@ -1,0 +1,8 @@
+import Base
+import ./main.bend as Game
+
+law esc_quits(rest, g):
+  Game.Pong.events(Key{27, True{}} <> rest, g) == None{}
+
+law last_press(+code, d1, +d2, +keys):
+  Game.Pong.press(code, d2, Game.Pong.press(code, d1, keys)) == Game.Pong.press(code, d2, keys)

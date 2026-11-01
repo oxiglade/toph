@@ -1,0 +1,5 @@
+import Base
+import ./main.bend as Hello
+
+law prints_hello:
+  Hello.main() == IO.print("Hello, world!")

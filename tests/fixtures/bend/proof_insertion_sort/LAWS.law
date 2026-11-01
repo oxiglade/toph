@@ -1,0 +1,8 @@
+import Base
+import ./main.bend as Sort
+
+law sort_sorted(+xs):
+  Sort.Sorted(Sort.sort(xs))
+
+law sort_perm(+x, +xs):
+  Sort.count(x, Sort.sort(xs)) == Sort.count(x, xs)

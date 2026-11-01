@@ -1,0 +1,9 @@
+import Base
+import ./main.bend as Fetch
+
+law body_after_blank(b):
+  Fetch.http_body("\r\n\r\n" ++ b) == b
+
+law body_suffix(+s):
+  exs p: String
+  p ++ Fetch.http_body(s) == s

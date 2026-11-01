@@ -29,3 +29,17 @@ test("an incompatible Bend is refused before reading input", () => {
     expect(cli(["--version"], { ...process.env, PATH: "" }).err).toContain("bend was not found");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("build writes plain Bend and check accepts law source without writing beside it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "toph-cli-"));
+  try {
+    const input = join(dir, "counterexample.law");
+    writeFileSync(input, "import Base\nlaw wrong(n: Nat):\n  1n+n == n\n");
+    expect(cli(["build", input, "-o", join(dir, "generated.bend")]).code).toBe(0);
+    const result = cli(["check", input, "--json", "--n", "10"]);
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.out);
+    expect(report.file).toBe(input);
+    expect(report.results[0].bindings).toEqual({ n: "0n" });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
