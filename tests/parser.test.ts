@@ -40,3 +40,17 @@ test("unrecognized declarations, unterminated strings and missing delimiters are
     expect(parseModule(source, "bad.law").diagnostics.length).toBeGreaterThan(0);
   }
 });
+
+test("recovery preserves a declaration reached before an error", () => {
+  for (const prefix of ["law empty:\n", "law repeat:\n  0n == 0n\nlaw repeat:\n  0n == 0n\n", "def empty() -> Nat:\n  )\n"]) {
+    const module = parseModule(prefix + "law good:\n  1n == 1n\n", "recover.law");
+    expect(module.diagnostics.length).toBeGreaterThan(0);
+    expect(module.declarations.at(-1)?.name).toBe("good");
+  }
+});
+
+test("import paths can contain keyword directories", () => {
+  const module = parseModule("import ./as/helper.law as H\n", "imports.law");
+  expect(module.diagnostics).toEqual([]);
+  expect(module.imports[0].path).toBe("./as/helper.law");
+});

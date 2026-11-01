@@ -4,7 +4,7 @@ export type Source = { file: string; text: string };
 export type Span = { source: Source; start: number; end: number };
 export type Diagnostic = { message: string; span: Span };
 export type Mapping = { start: number; end: number; origin: Span };
-export type Mapped = { text: string; mappings: Mapping[] };
+export type Mapped = { text: string; mappings: Mapping[]; namespace?: string };
 
 export function location(span: Span): string {
   const before = span.source.text.slice(0, span.start).split("\n");
@@ -53,15 +53,38 @@ export function joinMapped(parts: Mapped[], separator: Mapped): Mapped {
 }
 
 export function originAt(output: Mapped, start: number, end = start + 1): Span | undefined {
+  if (start === output.text.length) return output.mappings.at(-1)?.origin;
   const candidates = output.mappings.filter(m => m.start < end && m.end > start);
   candidates.sort((a, b) => (a.origin.end - a.origin.start) - (b.origin.end - b.origin.start));
   return candidates[0]?.origin ?? output.mappings.find(m => m.start <= start && m.end > start)?.origin;
 }
 
+export function sliceMapped(output: Mapped, start: number, end: number): Mapped {
+  return {
+    text: output.text.slice(start, end),
+    mappings: output.mappings.filter(m => m.start < end && m.end > start).map(m => ({
+      ...m, start: Math.max(start, m.start) - start, end: Math.min(end, m.end) - start,
+    })),
+  };
+}
+
+function bendBody(output: Mapped): Mapped {
+  const parts: Mapped[] = [];
+  let offset = 0, imports = true;
+  for (const line of output.text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("import ")) imports = false;
+    const end = Math.min(output.text.length, offset + line.length + 1);
+    parts.push(sliceMapped(output, imports && trimmed.startsWith("import ") ? offset + line.length : offset, end));
+    offset = end;
+  }
+  return { ...concat(...parts), namespace: output.namespace };
+}
+
 export function bendError(error: unknown, outputs: Mapped[]): Error {
   const err = error as B.Err;
   if (err?.$ !== "Err" || !err.spn) return error instanceof Error ? error : new Error(errorText(error));
-  const output = outputs.find(o => o.text === err.spn!.file.str);
+  const output = outputs.flatMap(o => [o, bendBody(o)]).find(o => o.text === err.spn!.file.str && (o.namespace === undefined || o.namespace === err.spn!.file.ns));
   const origin = output && originAt(output, err.spn.beg, Math.max(err.spn.end, err.spn.beg + 1));
   if (!origin) return new Error(errorText(error));
   const detail = B.err_show({ ...err, spn: undefined });

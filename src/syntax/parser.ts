@@ -47,6 +47,7 @@ class Parser {
     if (!(error instanceof SourceError)) throw error;
     this.diagnostics.push(...error.diagnostics);
     this.depth = 0;
+    if (this.current.column === 0 && ["law", "def", "import"].includes(this.current.text)) return;
     while (this.current.kind !== "newline" && this.current.kind !== "eof") this.i++;
     this.newlines();
   }
@@ -223,7 +224,7 @@ class Parser {
         if (this.take("import")) {
           const start = this.previous.span.start, pathStart = this.current.span.start;
           let end = pathStart;
-          while (this.current.kind !== "newline" && this.current.kind !== "eof" && !this.is("as")) {
+          while (this.current.kind !== "newline" && this.current.kind !== "eof") {
             if (end !== pathStart && this.current.span.start !== end) break;
             end = this.current.span.end; this.i++;
           }
