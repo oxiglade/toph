@@ -23,8 +23,8 @@ Options:
   --json               Print a JSON report (default: human-readable text).
   --help               Show this help; use without an input file.
 
-Closed claims run once. U32/F32 generation retains machine boundaries.
-.law input is compiled in a temporary directory.`;
+A law with no for binders runs once. U32 and F32 inputs include their edge values.
+A .law input is compiled in a temporary directory.`;
 
 const buildUsage = `Usage: toph build <LAWS.law> [-o out.bend]
 Compile and validate .law source as Bend.

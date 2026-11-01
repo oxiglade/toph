@@ -63,9 +63,9 @@ qualified_name = name, {".", name} ;
 
 Letters in identifiers are ASCII. Names may not be declaration/control
 keywords. Strings use double quotes and Bend's escapes; a physical newline
-inside a string is an error. Escape validity is checked by Bend. Integers
-without a suffix have type `U32`; `23n` has type `Nat`. Numeric range checks
-belong to Bend. There are no negative, floating-point or character literals.
+inside a string is an error. Bend checks escapes and numeric ranges.
+Integers without a suffix have type `U32`; `23n` has type `Nat`. There are
+no negative, floating-point or character literals.
 
 The EBNF expression production is resolved by this precedence table,
 tightest first:
@@ -97,9 +97,8 @@ parenthesize arguments containing comparison or lower-precedence operators.
 Parenthesized expressions, argument lists and headers can span lines.
 A line may also continue immediately after an infix operator, provided the
 next token is indented. Otherwise a newline ends the expression. A closing
-delimiter may align with the declaration. A missing delimiter does not
-consume the following declaration during recovery. Trailing commas are
-accepted in call, constructor, list and parameter lists. A tuple needs at
+delimiter may align with the declaration. Trailing commas are accepted in
+call, constructor, list and parameter lists. A tuple needs at
 least two elements; `()` is an empty call argument list, not a value.
 
 ## Laws, types and scopes
@@ -132,9 +131,9 @@ existential witnesses, imported aliases and available definitions. Premises
 are neither merged nor simplified. A proof that must be referenced or
 unrestricted belongs in an explicitly named header parameter.
 
-Typed `exs` binders follow premises, retain their order, and remain affine
-`exs` binders in Bend. Existentials do not take a quantity marker. Each witness is visible in later witness annotations
-and the conclusion, never in a premise. Duplicate header or witness names
+Typed `exs` binders follow premises, keep their order, and stay affine `exs`
+binders in Bend. Existentials take no quantity marker. Each witness is
+visible in later witness annotations and the conclusion, never in a premise. Duplicate header or witness names
 are rejected. Header order is also the order of Bend's dependent telescope;
 Bend rejects references to later binders.
 
@@ -321,7 +320,8 @@ bad.law:3:9: type mismatch: Bool / Nat
 Syntax recovery synchronizes at statement and declaration boundaries and
 collects several errors in a file. Inference collects errors across
 independent declarations; it stops within a failing declaration. Bend
-validation reports its first error. Unresolved inferred types point at the expression requiring them.
+validation reports its first error. An unresolved inferred type points at
+the expression that needs it.
 
 This frontend does not accept all Bend syntax. Put ADT declarations,
 proofs, foreign/unsafe definitions, template binders, `do` blocks, rewrites,

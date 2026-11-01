@@ -8,7 +8,7 @@ every law on generated inputs and prints a counterexample when one fails, usuall
 so you learn that a law or the code is wrong before anyone spends time on a proof. `toph build`
 compiles `.law` files, a shorter syntax for law files, into plain Bend.
 
-Toph is not part of Bend and is not made by the Bend team.
+Toph isn't part of Bend or made by the Bend team.
 
 ## Install
 
@@ -41,21 +41,20 @@ FAIL sort_removes_zero  3/3 accepted (100.0%)  0.001s  seed=42
 ```
 
 Toph builds inputs from each binder's type, favouring small values, boundary values and values
-shared between binders, since that is where laws usually break. A `for` premise filters the inputs,
+shared between binders. A `for` premise filters the inputs,
 and the share that passes is reported, so a law whose premise almost never holds is visible. Every
 counterexample is shrunk and then replayed on Bend's own normalizer before it is reported.
 
 A pass means no counterexample was found, not that the law holds: the proof is still Bend's job.
 On the 43 laws in Bend 2.0.39's demos, Toph decides all but two. One compares two IO programs and
-the other depends on a float subtraction the normalizer leaves unevaluated; both are reported as
-undecided rather than guessed. `toph check --help` lists the sampling and time limits and the exit
-codes.
+the other depends on a float subtraction the normalizer leaves unevaluated, so both come back
+undecided. `toph check --help` lists the sampling and time limits and the exit codes.
 
 ## Write shorter laws
 
-A `.law` file holds laws only. Types are inferred from the definitions the law uses, `==` needs no
-type, `when` takes a Bool premise, and operators and field access work as you would expect. Code and
-proofs stay in ordinary `.bend` files.
+A `.law` file holds laws and the helpers they use. Types are inferred from the definitions a law
+calls, `==` needs no type, `when` takes a Bool premise, arithmetic and comparisons use operators,
+and `r.field` reads a record field. Code and proofs stay in ordinary `.bend` files.
 
 ```python
 law sort_perm:
@@ -72,8 +71,8 @@ law sort_perm(+x, +xs):
 `toph build LAWS.law` writes `LAWS.bend` beside it, which your `PROOF.bend` imports as usual, and
 `toph check LAWS.law` builds and checks in one step. Every construct is sugar for existing Bend;
 [docs/SYNTAX.md](docs/SYNTAX.md) gives the exact translation of each. Nothing is reordered or
-simplified, and a type that cannot be inferred is an error, not a guess. Errors point at the `.law`
-line that caused them, including errors Bend reports in the generated code.
+simplified, and a type Toph can't infer is an error. Errors point at the `.law` line that caused
+them, including errors Bend reports in the generated code.
 
 ## License
 

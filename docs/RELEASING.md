@@ -1,8 +1,8 @@
 # Releases
 
 Use the repository's devenv for development and `devenv shell -- bun test`
-to run the suite. `TOPH_VERDICT=1` additionally checks the proof fixtures with
-Bend's Lean backend; it requires BendTT and Lean on the configured path.
+to run the suite. With `TOPH_VERDICT=1` the tests also check the proof
+fixtures with `bend --verdict`, which needs Bend's Lean kernel built.
 
 `devenv shell -- bun run release` builds the standalone executables into
 `dist/release/` using the Bun version in `.bun-version`:
@@ -12,13 +12,14 @@ Bend's Lean backend; it requires BendTT and Lean on the configured path.
 - `toph-<version>-linux-x64`
 - `toph-<version>-linux-arm64`
 
-The version comes from `package.json`. x64 targets use Bun's baseline CPU
-builds. Linux targets use glibc. Each binary embeds the checking worker and Bend compiler assets.
-The binaries are not Developer ID signed or notarized.
+The version comes from `package.json`. The x64 targets use Bun's baseline
+CPU builds and the Linux targets use glibc. Each binary embeds the checking
+worker and Bend's compiler assets. The binaries aren't Developer ID signed or
+notarized.
 
-Verify `SHA256SUMS` inside `dist/release` with `shasum -a 256 -c SHA256SUMS` on macOS or
-`sha256sum -c SHA256SUMS` on Linux. Cross-compilation does not test whether a
-binary runs on the target platform.
+Check them with `shasum -a 256 -c SHA256SUMS` on macOS or
+`sha256sum -c SHA256SUMS` on Linux, from inside `dist/release`. Building a
+target doesn't run it, so try each binary on its platform before relying on it.
 
 CI runs `bun test` on macOS and Linux for pushes and pull requests. The setup
 action installs the exact Bun version and downloads Bend's release archive.
