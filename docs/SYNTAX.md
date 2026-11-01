@@ -20,7 +20,7 @@ import       = "import", ("Base" | path, "as", name), NEWLINE ;
 path         = non_whitespace_path_ending_in_law_or_bend ;
 law          = "law", name, ["(", [parameters], ")"], ":", NEWLINE,
                INDENT, {"when", expr, NEWLINE},
-               {"exs", typed_parameter, NEWLINE}, expr, NEWLINE, DEDENT ;
+               {"exs", name, ":", expr, NEWLINE}, expr, NEWLINE, DEDENT ;
 helper       = "def", qualified_name, "(", [typed_parameters], ")",
                "->", expr, ":", NEWLINE, INDENT, body, DEDENT ;
 parameters   = parameter, {",", parameter}, [","] ;
@@ -48,7 +48,8 @@ primary      = qualified_name | literal | "&0" | "&1" | "&2"
              | "[", [arguments], "]"
              | "(", expr, ":", expr, ")" | "{", expr, ":", expr, "}"
              | "not", expr | "+", expr | natural_successor, expr
-             | ("@" | "&"), [quantity], name, ":", expr, "->", expr ;
+             | "@", [quantity], name, ":", expr, "->", expr
+             | "&", name, ":", expr, "->", expr ;
 suffix       = "(", [arguments], ")" | "{", [arguments], "}"
              | ".", name | "<", arguments, ">" ;
 arguments    = expr, {",", expr}, [","] ;
@@ -132,8 +133,8 @@ existential witnesses, imported aliases and available definitions. Premises
 are neither merged nor simplified. A proof that must be referenced or
 unrestricted belongs in an explicitly named header parameter.
 
-Typed `exs` binders follow premises, retain their quantities and order, and
-remain `exs` in Bend. Each witness is visible in later witness annotations
+Typed `exs` binders follow premises, retain their order, and remain affine
+`exs` binders in Bend. Existentials do not take a quantity marker. Each witness is visible in later witness annotations
 and the conclusion, never in a premise. Duplicate header or witness names
 are rejected. Header order is also the order of Bend's dependent telescope;
 Bend rejects references to later binders.
@@ -180,7 +181,7 @@ parsed tree; they do not change its meaning.
 | `k{a, b}` | `k{E(a), E(b)}` |
 | `f(a, b)` | `E(f)(E(a), E(b))`, plus any recovered erased prefix |
 | `x => e`, `+x => e` | `(x => E(e))`, `(+x => E(e))` |
-| `@q x: T -> p`, `&q x: T -> p` | `(@q x: E(T) -> P(p))`, `(&q x: E(T) -> P(p))`; `q` is optional `+`/`-` without a space |
+| `@qx: T -> p`, `&x: T -> p` | `(@qx: E(T) -> P(p))`, `(&x: E(T) -> P(p))`; `q` is optional `+`/`-`, and `&` is affine |
 | `kn+e` | `kn+(E(e))`, Bend's natural successor syntax |
 
 Names, string contents, numeric literals and explicit quantities are
@@ -254,7 +255,9 @@ meaning. Local bindings scope over the remaining body; branch bindings
 remain within that branch. Bend still enforces matchability, exhaustiveness,
 quantities and decreasing recursion. A computed match scrutinee may parse
 but be rejected by Bend. Typed and erased local bindings are supported;
-parallel bindings and semicolon-separated bodies are not.
+parallel bindings and semicolon-separated bodies are not. Bend can require
+an explicit annotation on a literal or constructor binding, for example
+`-saved: Nat = 0n`.
 
 `receiver.field` requires an already known, monomorphic datatype with one
 constructor and the named field. For an imported record
@@ -290,7 +293,8 @@ meaning; generated import paths are relative to the output directory.
 Imported `.law` modules get deterministic companion names based on their
 relative paths. Cycles and overwriting an imported implementation are errors.
 
-Each generated `.bend` has a `.bend.map.json` companion. This is Toph's
+Each generated `.bend` has a `.bend.map.json` companion and a
+`# toph-map: <basename>.bend.map.json` comment identifying it. This is Toph's
 version-1 interval map, not the JavaScript source-map format:
 
 - `file` is the generated basename; `sources` contains paths relative to
@@ -301,7 +305,9 @@ version-1 interval map, not the JavaScript source-map format:
   owning expression or binder. Getter bodies map to the first field access
   requesting that getter. EOF errors use the final mapping.
 
-Both `build` validation and `check file.law` use the maps before removing
+The shared Bend error formatter also loads saved maps in the checking
+worker, so later Bend errors retain their origins. Both `build` validation
+and `check file.law` use the maps before removing
 any temporary output. Bend's import-line removal is accounted for, and
 module identity distinguishes equal generated texts from different files.
 Bend errors include the original source and generated Bend context.

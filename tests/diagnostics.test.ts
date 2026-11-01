@@ -108,3 +108,20 @@ test("build saves complete maps for relocated output and companion modules", asy
     expect(helperMap.sources).toEqual(["../helper.law"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("the shared Bend error formatter reads saved maps in another process", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-worker-map-")));
+  try {
+    writeFileSync(join(dir, "source.law"), "import Base\ndef value() -> Nat:\n  1n + 2n\n");
+    const output = await build(join(dir, "source.law"));
+    const script = `import { B, errorText } from "./src/bend.ts";
+      const book = B.book_nil();
+      await B.book_load(book, process.argv[1], "", new Map());
+      const term = book.tlds.value.v;
+      console.log(errorText(B.Err(book, B.ctx_nil(), "evaluation failed", undefined, term.s)));`;
+    const child = Bun.spawnSync(["bun", "-e", script, output]);
+    expect(child.exitCode).toBe(0);
+    expect(child.stdout.toString()).toContain("source.law:3:");
+    expect(child.stdout.toString()).toContain("Generated Bend:");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

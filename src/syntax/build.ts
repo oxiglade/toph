@@ -30,12 +30,15 @@ export async function build(input: string, output = input.replace(/\.law$/, ".be
       const hash = createHash("sha256").update(relative(dirname(input), dependency)).digest("hex").slice(0, 12);
       await compile(dependency, prefix + "_" + hash + ".bend");
     }
-    const result = await desugarMapped(source, file, stage, fields, modules);
+    const body = await desugarMapped(source, file, stage, fields, modules);
+    const origin = { source: body.mappings[0].origin.source, start: 0, end: source.length };
+    const result = concat(mapped(`# toph-map: ${name}.map.json\n`, origin), body);
     result.namespace = file === input ? "" : basename(name, ".bend");
     writeFileSync(join(stage, name), result.text);
     generated.set(name, result);
     if (fields.definitions.size) {
-      const getters = { ...fields.mapped(), namespace: basename(fields.file, ".bend") };
+      const body = fields.mapped();
+      const getters = { ...concat(mapped(`# toph-map: ${fields.file}.map.json\n`, body.mappings[0].origin), body), namespace: basename(fields.file, ".bend") };
       writeFileSync(join(stage, fields.file), getters.text);
       generated.set(fields.file, getters);
     }

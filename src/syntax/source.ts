@@ -1,4 +1,8 @@
-import { B, errorText } from "../bend.ts";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import * as B from "../../vendor/bend/bend.ts";
+
+const errorText = (error: any): string => error?.$ === "Err" ? B.err_show(error) : String(error);
 
 export type Source = { file: string; text: string };
 export type Span = { source: Source; start: number; end: number };
@@ -90,4 +94,23 @@ export function bendError(error: unknown, outputs: Mapped[]): Error {
   const detail = B.err_show({ ...err, spn: undefined });
   const generated = { source: { file: "generated Bend", text: output!.text }, start: err.spn.beg, end: err.spn.end };
   return new Error(`${location(origin)}: Bend ${detail}\n${excerpt(origin)}\nGenerated Bend:\n${excerpt(generated)}`);
+}
+
+export function savedBendError(error: B.Err): string | undefined {
+  const file = error.spn?.file as (B.File & { dir?: string }) | undefined;
+  const name = /^# toph-map: ([A-Za-z_][\w-]*\.bend\.map\.json)\n/.exec(file?.str ?? "")?.[1];
+  if (!file?.dir || !name) return;
+  try {
+    const data = JSON.parse(readFileSync(join(file.dir, name), "utf8"));
+    if (data.version !== 1 || data.file + ".map.json" !== name) return;
+    const sources: Source[] = data.sources.map((path: string, i: number) => ({
+      file: resolve(file.dir!, path), text: data.sourcesContent[i],
+    }));
+    const output: Mapped = {
+      text: readFileSync(join(file.dir, data.file), "utf8"), namespace: file.ns,
+      mappings: data.mappings.map((m: any) => ({ start: m.start, end: m.end,
+        origin: { source: sources[m.source], start: m.originalStart, end: m.originalEnd } })),
+    };
+    return bendError(error, [output]).message;
+  } catch { return; }
 }
