@@ -102,8 +102,11 @@ class Evaluation {
     if (depth > 100) throw new Unsupported("proposition nesting exceeds 100");
     const t = this.whnf(type);
     if (t.$ === "Eql") {
+      if (this.whnf(t.T).$ === "All") {
+        throw new Unsupported("equality of IO programs or functions is unsupported: " + show(t.T));
+      }
       const a = this.normal(t.a), b = this.normal(t.b);
-      return JSON.stringify(a) === JSON.stringify(b)
+      return B.term_compare("EQ", this.book, a, b)
         ? { ok: true, proof: B.Rfl() }
         : { ok: false, left: show(a), right: show(b) };
     }

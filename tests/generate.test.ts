@@ -43,3 +43,15 @@ test("equality aliases fill later fields before generating their dependents", as
   B.term_check(book, { t: B.Ref("indexed_identity"), n: 0, def: "indexed_identity", qs: [] }, value, B.Lone(), type, B.ctx_nil(), 0);
   expect(value.k).toBe("Alias");
 });
+
+test("F32 generation includes signed zero, subnormals, infinities and NaN bits", async () => {
+  const { book } = await load(`${import.meta.dir}/fixtures/floats.bend`, false);
+  const bits = new Set<number>();
+  const rng = new Random(42);
+  for (let i = 0; i < 200; i++) {
+    const value = new Generator(book, rng, false).value(B.ADT("F32", []));
+    expect(value.$).toBe("Lit");
+    bits.add(value.v);
+  }
+  for (const value of [0, 0x80000000, 1, 0x7f800000, 0xff800000, 0x7fc00000]) expect(bits.has(value)).toBe(true);
+});

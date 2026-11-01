@@ -37,6 +37,14 @@ test("demo existential witnesses satisfy the entire claim", async () => {
   }
 });
 
+test("F32 equality uses Bend bits and IO equality stops before evaluating programs", async () => {
+  const report = await runFile(fixture("floats"), { ...options, n: 20, time: 0.5 });
+  expect(report.results.map(r => r.status)).toEqual(["pass", "fail", "unknown", "unknown"]);
+  expect(report.results[1].replayed).toBe(true);
+  expect(report.results[2].reason).toContain("F32.add");
+  expect(report.results[3].reason).toContain("IO");
+});
+
 test("false laws produce small counterexamples that replay without acceleration", async () => {
   const fast = await load(fixture("false"));
   const plain = await load(fixture("false"), false);

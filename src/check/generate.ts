@@ -56,6 +56,10 @@ export class Generator {
         ? [0, 1, 2, 3, 4, 8, 9, 10, 11, 16, 31, 32, 63, 64]
         : [0, 1, 2, 3, 9, 10, 255, 256, 65535, 65536, 2147483647, 2147483648, 4294967294, 4294967295];
       v = B.Lit(t.k, this.aligned ? this.number : this.rng.pick(boundaries));
+    } else if (t.k === "F32") {
+      v = B.Lit("F32", this.rng.pick([0, 0x80000000, 1, 0x80000001,
+        0x007fffff, 0x00800000, 0x7f7fffff, 0xff7fffff, 0x7f800000, 0xff800000,
+        0x7fc00000, 0x7fc00001, ...[1, -1, 0.5, -0.5, 2, 10].map(B.f32_to_bits)]));
     } else if (t.k === "String") {
       v = B.Lit("String", this.aligned ? this.string : this.rng.pick(["", "a", "b", "0", "aa", "é", "🙂"]));
     } else if (t.k === "Char") {
@@ -120,7 +124,7 @@ export class Generator {
     const t = B.term_wnf(this.book, type);
     if (t.$ === "Eql") return 0;
     if (t.$ !== "ADT" || seen.has(t.k)) return Infinity;
-    if (["Nat", "U32", "String", "Char"].includes(t.k)) return 1;
+    if (["Nat", "U32", "F32", "String", "Char"].includes(t.k)) return 1;
     const next = new Set([...seen, t.k]);
     return 1 + Math.min(...this.book.tlds[t.k].c.map((c: any) =>
       fields(this.book, t, c.k).reduce((n: number, f: Term) => n + this.height(f, next), 0)));
