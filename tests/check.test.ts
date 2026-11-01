@@ -1,9 +1,41 @@
 import { expect, test } from "bun:test";
 import { checkLaw, load, replayLaw } from "../src/check/engine.ts";
 import { runFile } from "../src/check/run.ts";
+import { B } from "../src/bend.ts";
 
 const options = { n: 100, seed: 42, time: 10 };
 const fixture = (name: string) => `${import.meta.dir}/fixtures/${name}.bend`;
+
+test("a counterexample is withheld when unaccelerated replay disagrees", async () => {
+  const program = await load(fixture("replay"));
+  program.book.tlds["Nat.add"] = { ...program.book.tlds["Nat.add"],
+    v: B.Lam("a", 0, () => B.Lam("b", 1, () => B.Lit("Nat", 0))) };
+  const result = checkLaw(program, "successor", options);
+  expect(result.status).toBe("unknown");
+  expect(result.reason).toContain("replay");
+  expect(result.bindings).toBeUndefined();
+  expect(result.witness).toBeUndefined();
+});
+
+test("typed evaluator laws compare data with equality evidence", async () => {
+  const program = await load(`${import.meta.dir}/fixtures/bend/proof_typed_eval/LAWS.bend`);
+  for (const name of program.laws) expect(checkLaw(program, name, options).status).toBe("pass");
+});
+
+test("existentials solve joint equalities and search without treating exhaustion as failure", async () => {
+  const program = await load(fixture("witnesses"));
+  const results = program.laws.map(name => checkLaw(program, name, options));
+  expect(results.map(r => r.status)).toEqual(["pass", "pass", "unknown", "fail", "pass"]);
+  expect(results[2].reason).toContain("search");
+  expect(results[3].replayed).toBe(true);
+});
+
+test("demo existential witnesses satisfy the entire claim", async () => {
+  for (const [demo, law] of [["proof_numerics", "divmod_ok"], ["io_http_fetch", "body_suffix"]]) {
+    const program = await load(`${import.meta.dir}/fixtures/bend/${demo}/LAWS.bend`);
+    expect(checkLaw(program, law, options).status).toBe("pass");
+  }
+});
 
 test("false laws produce small counterexamples that replay without acceleration", async () => {
   const fast = await load(fixture("false"));

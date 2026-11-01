@@ -2,14 +2,16 @@ import { resolve } from "node:path";
 import { B, errorText, show, type Term } from "../bend.ts";
 import { Generator, Random, Unsupported, smaller, weight } from "./generate.ts";
 import { accelerate } from "./naturals.ts";
+import { Constraints, type Variable } from "./constraints.ts";
 
 export type Options = { n: number; seed: number; time: number };
-export type Program = { book: any; laws: string[]; loadMs: number };
+export type Program = { book: any; originalBook: any; laws: string[]; loadMs: number };
 export type Result = {
   law: string; status: "pass" | "fail" | "vacuous" | "unknown" | "timeout";
   attempted: number; accepted: number; elapsedMs: number; seed: number;
   firstFailureMs?: number; bindings?: Record<string, string>; left?: string; right?: string;
   reason?: string; shrinkChecks?: number;
+  replayed?: boolean;
   witness?: Term[];
 };
 type Decision = { ok: boolean; proof?: Term; left?: string; right?: string };
@@ -24,7 +26,7 @@ export async function load(file: string, fast = true): Promise<Program> {
     const def = book.tlds[name];
     return def.$ === "Def" && def.l && !def.b;
   });
-  return { book: fast ? await accelerate(book) : book, laws, loadMs: performance.now() - start };
+  return { book: fast ? await accelerate(book) : book, originalBook: book, laws, loadMs: performance.now() - start };
 }
 
 class Deadline extends Error {}
@@ -36,6 +38,7 @@ class Evaluation {
 
   normal(term: Term): Term {
     let t = this.whnf(term);
+    if (t.$ === "Rfl") return B.Rfl();
     if (t.$ === "Lit") return t.k === "String"
       ? B.term_higher(B.lit_of(Array.from(t.v as string, c => c.codePointAt(0)!))) : B.Lit(t.k, t.v);
     if (t.$ !== "Ctr") throw new Unsupported("equality has a non-concrete normal form: " + show(t));
@@ -121,58 +124,95 @@ class Evaluation {
           const b = this.decide(B.App(t.x[3], a.proof), depth + 1);
           return b.ok ? { ok: true, proof: B.Ctr("Tuple", [a.proof, b.proof]) } : b;
         }
-        const variable = B.Var("witness", 10000 + depth);
-        const body = B.App(t.x[3], variable);
-        const solution = this.solve(body, variable.i);
-        if (solution === false) return { ok: false, left: show(body), right: "an existential witness" };
-        if (solution) {
-          const result = this.decide(B.App(t.x[3], solution), depth + 1);
-          return result.ok ? { ok: true, proof: B.Ctr("Tuple", [solution, result.proof]) } : result;
-        }
-        throw new Unsupported("existential needs a witness beyond constructor equality: " + show(t.x[2]));
+        return this.existential(t, depth);
       }
     }
     throw new Unsupported("cannot decide " + show(t));
   }
 
-  solve(type: Term, index: number): Term | false | undefined {
-    const t = this.whnf(type);
-    if (t.$ === "Eql") {
-      for (const [pattern, value] of [[t.a, t.b], [t.b, t.a]]) {
-        let ground: Term;
-        try { ground = this.normal(value); } catch (e) { if (e instanceof Unsupported) continue; throw e; }
-        const match = this.match(pattern, ground, index);
-        if (match !== undefined) return match;
+  private existential(type: Term, depth: number): Decision {
+    const constraints = new Constraints(this.book, () => this.tick());
+    const variables: Variable[] = [];
+    let body = type;
+    while (true) {
+      const t = this.whnf(body);
+      if (t.$ !== "ADT" || t.k !== "Sigma" || this.proposition(t.x[2])) break;
+      const variable = constraints.variable("witness");
+      variables.push(variable);
+      body = B.App(t.x[3], variable);
+    }
+    const equations: Extract<Term, { $: "Eql" }>[] = [];
+    const collect = (type: Term, depth: number) => {
+      if (depth > 100) throw new Unsupported("existential nesting exceeds 100");
+      const t = this.whnf(type);
+      if (t.$ === "Eql") equations.push(t);
+      if (t.$ === "ADT" && t.k === "Sigma" && this.proposition(t.x[2])) {
+        collect(t.x[2], depth + 1);
+        collect(B.App(t.x[3], B.Var("proof", -200000 - depth)), depth + 1);
+      }
+    };
+    collect(body, depth);
+    for (let pass = 0; pass <= variables.length; pass++) {
+      for (const equation of equations) {
+        const result = constraints.equal(equation.a, equation.b)
+          ?? this.solveAppend(equation.a, equation.b, constraints);
+        if (result === false) return { ok: false, left: show(equation), right: "an existential witness" };
       }
     }
-    if (t.$ === "ADT" && t.k === "Empty") return false;
-    if (t.$ === "ADT" && t.k === "Sigma" && this.proposition(t.x[2])) {
-      const a = this.solve(t.x[2], index);
-      if (a !== undefined) return a;
-      return this.solve(B.App(t.x[3], B.Var("proof", index + 1000)), index);
+    const solutions = variables.map(variable => {
+      try { return this.normal(variable); }
+      catch (e) { if (e instanceof Unsupported) return undefined; throw e; }
+    });
+    const forced = solutions.every(v => v !== undefined);
+    let reason = "no satisfying witness";
+    for (let trial = 0; trial < (forced ? 1 : 64); trial++) {
+      const values: Term[] = [];
+      const generator = new Generator(this.book, new Random(trial + 1), false);
+      let claim = type;
+      try {
+        for (let i = 0; i < variables.length; i++) {
+          const t = this.whnf(claim);
+          const domain = this.whnf(t.x[2]);
+          const value = solutions[i] ?? (domain.$ === "ADT" && domain.k === "Nat" && trial < 32
+            ? B.Lit("Nat", trial) : generator.value(domain));
+          B.term_check(this.book, { t: B.Ref("witness"), n: 0, def: "witness", qs: [] },
+            value, B.Lone(), domain, B.ctx_nil(), 0);
+          values.push(value);
+          claim = B.App(t.x[3], value);
+        }
+        const result = this.decide(claim, depth + 1);
+        if (result.ok) return { ok: true, proof: values.reduceRight((p, v) => B.Ctr("Tuple", [v, p]), result.proof!) };
+        if (forced) return result;
+      } catch (e) {
+        if (!(e instanceof Unsupported) && (e as any)?.$ !== "Err") throw e;
+        reason = errorText(e);
+      }
+    }
+    throw new Unsupported("existential search exhausted: " + reason);
+  }
+
+  private solveAppend(left: Term, right: Term, constraints: Constraints): boolean | undefined {
+    for (const [pattern, ground] of [[left, right], [right, left]]) {
+      const [head, args] = B.term_unapply(this.whnf(pattern));
+      if (head.$ !== "Ref" || head.k !== "String.append" || args.length !== 2) continue;
+      let value: Term;
+      try { value = this.normal(ground); }
+      catch (e) { if (e instanceof Unsupported) continue; throw e; }
+      if (value.$ !== "Lit" || value.k !== "String") continue;
+      for (const index of [0, 1]) {
+        let fixed: Term;
+        try { fixed = this.normal(args[1 - index]); }
+        catch (e) { if (e instanceof Unsupported) continue; throw e; }
+        if (fixed.$ !== "Lit" || fixed.k !== "String") continue;
+        const matches = index === 0 ? value.v.endsWith(fixed.v) : value.v.startsWith(fixed.v);
+        if (!matches) return false;
+        const rest = index === 0 ? value.v.slice(0, value.v.length - fixed.v.length) : value.v.slice(fixed.v.length);
+        return constraints.equal(args[index], B.Lit("String", rest));
+      }
     }
     return undefined;
   }
 
-  match(pattern: Term, ground: Term, index: number): Term | false | undefined {
-    let a = this.whnf(pattern), b = ground;
-    if (a.$ === "Var" && a.i === index) return b;
-    if (a.$ === "Lit" && b.$ === "Lit") return a.k === b.k && a.v === b.v ? undefined : false;
-    if (a.$ === "Lit" && b.$ === "Ctr") a = B.lit_step(a);
-    if (b.$ === "Lit" && a.$ === "Ctr") b = B.lit_step(b);
-    if (a.$ !== "Ctr" || b.$ !== "Ctr") return undefined;
-    if (a.k !== b.k) return false;
-    let candidate: Term | undefined;
-    for (let i = 0; i < a.x.length; i++) {
-      const value = this.match(a.x[i], b.x[i], index);
-      if (value === false) return false;
-      if (value !== undefined) {
-        if (candidate !== undefined && JSON.stringify(this.normal(candidate)) !== JSON.stringify(this.normal(value))) return false;
-        candidate = value;
-      }
-    }
-    return candidate;
-  }
 }
 
 function instance(program: Program, name: string, ev: Evaluation, generator?: Generator, supplied?: Term[]) {
@@ -253,6 +293,18 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
         if (!(e instanceof Deadline || e instanceof Unsupported)) throw e;
         result.reason = "shrinking stopped: " + e.message;
       }
+      let replay;
+      try {
+        replay = instance({ ...program, book: program.originalBook }, name,
+          new Evaluation(program.originalBook, ev.until), undefined, bindings.map(b => b.value));
+      } catch (e) {
+        throw new Unsupported("counterexample replay could not finish: " + errorText(e));
+      }
+      if (!replay.accepted || replay.decision!.ok) {
+        throw new Unsupported("counterexample rejected by unaccelerated replay");
+      }
+      result.replayed = true;
+      decision = replay.decision!;
       result.bindings = Object.fromEntries(bindings.map(b => [b.name, show(b.value)]));
       result.witness = bindings.map(b => B.term_lower(b.value));
       result.left = decision.left;
@@ -269,7 +321,8 @@ export function checkLaw(program: Program, name: string, options: Options): Resu
 }
 
 export function replayLaw(program: Program, name: string, values: Term[], time = 10) {
-  const sample = instance(program, name, new Evaluation(program.book, performance.now() + time * 1000),
+  const sample = instance({ ...program, book: program.originalBook }, name,
+    new Evaluation(program.originalBook, performance.now() + time * 1000),
     undefined, values.map(v => B.term_higher(v)));
   return !sample.accepted ? "skip" : sample.decision!.ok ? "pass" : "fail";
 }
