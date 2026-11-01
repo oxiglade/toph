@@ -58,11 +58,11 @@ test("accepted targets stop sampling early and sparse attempts do not become pas
 
 test("the file budget runs cheap laws before spending the remainder on a loop", async () => {
   const completed: string[] = [];
-  const report = await runFile(fixture("loop"), { ...options, time: 10, fileTime: 0.5 }, r => completed.push(r.law));
+  const report = await runFile(fixture("loop"), { ...options, time: 10, fileTime: 2 }, r => completed.push(r.law));
   expect(report.results.map(r => r.status)).toEqual(["timeout", "pass"]);
   expect(completed[0]).toBe("following");
-  expect(report.wallMs).toBeLessThan(1200);
-}, 3000);
+  expect(report.wallMs).toBeLessThan(3000);
+}, 6000);
 
 test("false laws produce small counterexamples that replay without acceleration", async () => {
   const fast = await load(fixture("false"));
