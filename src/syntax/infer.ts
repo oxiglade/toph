@@ -62,6 +62,12 @@ export class Context {
   value(n: Node, env: Map<string, Ty>): Ty {
     if (n.tag === "group") return this.value(n.xs[0], env);
     if (n.tag === "+") return this.value(n.xs[0], env);
+    if (n.tag === "ctor") return type("Construct", type(this.key(n.xs[0].text)), ...n.xs.slice(1).map(x => this.value(x, env)));
+    if (n.tag === "ann" && n.xs[0].tag === "op" && ["==", "!="].includes(n.xs[0].text)) return this.value(n.xs[0], env);
+    if (n.tag === "op" && ["==", "!="].includes(n.text)) {
+      const equality = type("Equality", this.value(n.xs[0], env), this.value(n.xs[1], env), n.xs[0].ty!);
+      return n.text === "==" ? equality : type("Fn", equality, type("Empty"));
+    }
     if (n.tag === "name") return type(this.key(n.text));
     if (n.tag === "generic") return type(this.key(n.text), ...(n.implicit ?? []), ...n.xs.map(x => this.value(x, env)));
     if (n.tag === "call") return type("Apply", ...n.xs.map(x => this.value(x, env)));
@@ -107,7 +113,7 @@ export class Context {
     } else if (["call", "ctor", "generic"].includes(n.tag)) {
       const name = n.tag === "generic" ? n.text : n.xs[0].text;
       const args = n.tag === "generic" ? n.xs : n.xs.slice(1);
-      if (n.tag === "call" && n.xs[0].tag !== "name") {
+      if (n.tag === "call" && (n.xs[0].tag !== "name" || name.includes(".") && env.has(name.split(".")[0]))) {
         t = infer(n.xs[0]);
         for (const x of args) { const a = fresh(), b = fresh(); unify(t, type("Fn", a, b)); infer(x, a); t = b; }
       } else if (env.has(name)) {

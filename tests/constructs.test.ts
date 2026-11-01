@@ -208,3 +208,25 @@ def reflexive(-A: Data, +x: A) -> Type:
 law call:
   {identity(Nat, 2n) == 2n : Nat}
 `));
+
+test("explicit proof parameters retain structural equality types", () => compare(`
+def keep(n: Nat, p: {n == n : Nat}) -> Nat:
+  n
+law retained(a: Nat, p: {a == a : Nat}):
+  keep(a, p) == a
+`, `
+def keep(n: Nat, p: {n == n : Nat}) -> Nat:
+  n
+law retained:
+  for a: Nat
+  for p: {a == a : Nat}
+  {keep(a, p) == a : Nat}
+`));
+
+test("function-valued fields can be called", () => compare(`import ./records.bend as R
+law call:
+  R.Action{x => x}.run(1n) == 1n
+`, `import ./records.bend as R
+law call:
+  {1n == 1n : Nat}
+`, dir => writeFileSync(join(dir, "records.bend"), "import Base\ntype Action is Type:\n  Action{run: Nat -> Nat}\n")));

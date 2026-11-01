@@ -4,9 +4,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { B } from "../bend.ts";
 import { desugarMapped, Fields } from "./desugar.ts";
-
 import { parseModule } from "./parser.ts";
-import { bendError, SourceError, type Mapped } from "./source.ts";
+import { bendError, concat, mapped, originAt, sliceMapped, SourceError, type Mapped } from "./source.ts";
 
 export async function build(input: string, output = input.replace(/\.law$/, ".bend")): Promise<string> {
   if (!input.endsWith(".law") || !output.endsWith(".bend")) throw new Error("build needs a .law input and a .bend output");
@@ -58,12 +57,26 @@ export async function build(input: string, output = input.replace(/\.law$/, ".be
       }
     }
     for (const [name, result] of generated) {
-      const relocated = result.text.replace(/^(import )(\S+)( as \w+)$/gm, (line, before, path, after) => {
-        const target = resolve(stage, path);
-        if (dirname(target) === stage && generated.has(basename(target))) return line;
-        return before + "./" + relative(directory, target) + after;
-      });
-      writeFileSync(join(directory, name), relocated);
+      const parts: Mapped[] = [];
+      let offset = 0;
+      for (const match of result.text.matchAll(/^(import )(\S+)( as \w+)$/gm)) {
+        const target = resolve(stage, match[2]);
+        if (dirname(target) === stage && generated.has(basename(target))) continue;
+        parts.push(sliceMapped(result, offset, match.index),
+          mapped(match[1] + "./" + relative(directory, target) + match[3], originAt(result, match.index)!));
+        offset = match.index + match[0].length;
+      }
+      const relocated = concat(...parts, sliceMapped(result, offset, result.text.length));
+      const sources = [...new Set(relocated.mappings.map(m => m.origin.source))];
+      const map = {
+        version: 1, file: name,
+        sources: sources.map(s => relative(directory, resolve(s.file))),
+        sourcesContent: sources.map(s => s.text),
+        mappings: relocated.mappings.map(m => ({ start: m.start, end: m.end,
+          source: sources.indexOf(m.origin.source), originalStart: m.origin.start, originalEnd: m.origin.end })),
+      };
+      writeFileSync(join(directory, name), relocated.text);
+      writeFileSync(join(directory, name + ".map.json"), JSON.stringify(map) + "\n");
     }
     return output;
   } catch (error) {

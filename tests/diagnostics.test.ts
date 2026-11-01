@@ -89,3 +89,22 @@ test("Bend quantity errors map to the declared binder", async () => {
     await expect(build(join(dir, "main.law"))).rejects.toThrow("main.law:2:11");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("build saves complete maps for relocated output and companion modules", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-saved-maps-")));
+  try {
+    writeFileSync(join(dir, "helper.law"), "import Base\ndef value() -> Nat:\n  1n\n");
+    writeFileSync(join(dir, "main.law"), "import Base\nimport ./helper.law as H\nlaw same:\n  H.value() == 1n\n");
+    const output = await build(join(dir, "main.law"), join(dir, "nested", "generated.bend"));
+    const map = JSON.parse(readFileSync(output + ".map.json", "utf8"));
+    const generated = readFileSync(output, "utf8");
+    expect(map.version).toBe(1);
+    expect(map.sources).toEqual(["../main.law"]);
+    expect(map.sourcesContent[0]).toContain("H.value() == 1n");
+    for (let i = 0; i < generated.length; i++) expect(map.mappings.some((m: any) => m.start <= i && m.end > i)).toBe(true);
+    expect(map.mappings.at(-1).end).toBe(generated.length);
+    const helper = generated.match(/import \.\/(generated_\w+\.bend) as H/)![1];
+    const helperMap = JSON.parse(readFileSync(join(dir, "nested", helper + ".map.json"), "utf8"));
+    expect(helperMap.sources).toEqual(["../helper.law"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

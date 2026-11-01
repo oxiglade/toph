@@ -67,7 +67,11 @@ class Parser {
     let n: Expr;
     if (this.take("(")) {
       this.depth++; const first = this.expr(); this.inside();
-      if (this.take(",")) n = this.node("tuple", "", start, first, ...this.list(")"));
+      if (this.take(",")) {
+        const rest = this.list(")");
+        if (!rest.length) this.fail("a tuple needs at least two elements", this.span(start));
+        n = this.node("tuple", "", start, first, ...rest);
+      }
       else if (this.take(":")) { const ty = this.expr(); this.inside(); this.need(")"); n = this.node("ann", "", start, first, ty); }
       else { this.need(")"); n = this.node("group", "", start, first); }
       this.depth--;
@@ -97,7 +101,7 @@ class Parser {
       else if (this.take(".")) n = this.node("field", this.name().text, start, n);
       else if (op === "<" && n.tag === "name" && this.current.span.start === n.span.end && /^[A-Z]/.test(n.text.split(".").at(-1)!)) {
         this.i++; this.depth++; this.inside(); const xs: Expr[] = [];
-        do { xs.push(this.expr(8)); this.inside(); } while (this.take(","));
+        do { xs.push(this.expr(8)); this.inside(); } while (this.take(",") && !this.is(">"));
         this.need(">"); this.depth--; n = this.node("generic", n.text, start, ...xs);
       } else if (precedence[op] !== undefined && precedence[op] >= min && !(pattern && op === "+")) {
         this.i++;

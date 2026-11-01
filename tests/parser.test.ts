@@ -54,3 +54,8 @@ test("import paths can contain keyword directories", () => {
   expect(module.diagnostics).toEqual([]);
   expect(module.imports[0].path).toBe("./as/helper.law");
 });
+
+test("tuples require two elements and type arguments accept a trailing comma", () => {
+  expect(parseModule("law bad:\n  (0n,) == 0n\n", "tuple.law").diagnostics.length).toBeGreaterThan(0);
+  expect(parseModule("law list(xs: List<Nat,>):\n  xs == xs\n", "list.law").diagnostics).toEqual([]);
+});
