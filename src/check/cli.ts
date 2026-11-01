@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build } from "../syntax/build.ts";
-
-export const usage = "toph check <LAWS.bend|LAWS.law> [--law NAME] [--n ATTEMPTS] [--samples ACCEPTED] [--size N] [--seed S] [--time SECONDS] [--file-time SECONDS] [--json]\nDefaults: 3000 attempts, 100 accepted samples, size 4, seed 42, 10s per law, 30s per file. Size bounds generated naturals and collections; U32/F32 retain machine boundaries.";
+import { checkDefaults, checkHelp } from "../help.ts";
+import { checkBendVersion } from "../version.ts";
 
 export function format(r: Result): string {
   const share = r.attempted ? (100 * r.accepted / r.attempted).toFixed(1) : "0.0";
@@ -21,10 +21,9 @@ export function format(r: Result): string {
 }
 
 export async function main(args: string[]) {
-  if (args.length === 0 || args[0] === "--help") { console.log(usage); return 0; }
-  if (args.shift() !== "check" || !args[0] || args[0].startsWith("--")) throw new Error(usage);
+  if (args.shift() !== "check" || !args[0] || args[0].startsWith("--")) throw new Error(checkHelp);
   const file = args.shift()!;
-  const options: Options & { law?: string } = { n: 3000, samples: 100, size: 4, seed: 42, time: 10, fileTime: 30 };
+  const options: Options & { law?: string } = { ...checkDefaults };
   let json = false;
   while (args.length) {
     const flag = args.shift()!;
@@ -41,6 +40,7 @@ export async function main(args: string[]) {
     }
     options[flag === "--file-time" ? "fileTime" : flag.slice(2) as "n" | "seed" | "time" | "samples" | "size"] = n;
   }
+  checkBendVersion();
   let temporary: string | undefined;
   let report: Awaited<ReturnType<typeof runFile>>;
   try {

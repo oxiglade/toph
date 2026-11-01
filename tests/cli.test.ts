@@ -29,8 +29,29 @@ test("an incompatible Bend is refused before reading input", () => {
     expect(result.code).toBe(2);
     expect(result.err).toContain("requires Bend 2.0.39");
     expect(result.err).toContain("found 2.0.38");
-    expect(cli(["--version"], { ...process.env, PATH: "" }).err).toContain("bend was not found");
+    expect(cli(["check", "missing.bend"], { ...process.env, PATH: "" }).err).toContain("bend was not found");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("help and version work without Bend, including command-specific help", () => {
+  const env = { ...process.env, PATH: "" };
+  for (const args of [[], ["help"], ["--help"], ["check", "--help"], ["build", "--help"], ["--version"]]) {
+    const result = cli(args, env);
+    expect(result.code).toBe(0);
+    expect(result.err).toBe("");
+    expect(result.out).toContain("toph");
+  }
+  const help = cli(["help"], env).out;
+  for (const flag of ["--law", "--n", "--samples", "--size", "--seed", "--time", "--file-time", "--json", "-o", "--help", "--version"]) {
+    expect(help).toContain(flag);
+  }
+  for (const command of ["check", "build"]) expect(cli([command, "--help"], env).out).toContain("Exit codes:");
+});
+
+test("help and version reject extra arguments instead of hiding mistakes", () => {
+  for (const args of [["help", "typo"], ["--help", "typo"], ["--version", "typo"], ["build", "--help", "typo"], ["check", "--help", "typo"]]) {
+    expect(cli(args).code).toBe(2);
+  }
 });
 
 test("build writes plain Bend and check accepts law source without writing beside it", () => {
