@@ -1,0 +1,70 @@
+import { B, errorText } from "../bend.ts";
+
+export type Source = { file: string; text: string };
+export type Span = { source: Source; start: number; end: number };
+export type Diagnostic = { message: string; span: Span };
+export type Mapping = { start: number; end: number; origin: Span };
+export type Mapped = { text: string; mappings: Mapping[] };
+
+export function location(span: Span): string {
+  const before = span.source.text.slice(0, span.start).split("\n");
+  return `${span.source.file}:${before.length}:${before.at(-1)!.length + 1}`;
+}
+
+export function excerpt(span: Span): string {
+  const before = span.source.text.slice(0, span.start).split("\n");
+  const line = before.length, column = before.at(-1)!.length;
+  const text = span.source.text.split("\n")[line - 1].replace(/\r$/, "");
+  const width = Math.max(1, Math.min(span.end - span.start, text.length - column));
+  return `${line}>| ${text}\n${" ".repeat(String(line).length)} | ${text.slice(0, column).replace(/[^\t]/g, " ")}${"^".repeat(width)}`;
+}
+
+export class SourceError extends Error {
+  constructor(readonly diagnostics: Diagnostic[]) {
+    super(diagnostics.map(d => `${location(d.span)}: ${d.message}\n${excerpt(d.span)}`).join("\n\n"));
+    this.name = "SourceError";
+  }
+}
+
+export function at<T>(span: Span, action: () => T): T {
+  try { return action(); }
+  catch (error) {
+    if (error instanceof SourceError) throw error;
+    throw new SourceError([{ span, message: error instanceof Error ? error.message : errorText(error) }]);
+  }
+}
+
+export function mapped(text: string, origin: Span): Mapped {
+  return { text, mappings: text.length ? [{ start: 0, end: text.length, origin }] : [] };
+}
+
+export function concat(...parts: Mapped[]): Mapped {
+  let text = "";
+  const mappings: Mapping[] = [];
+  for (const part of parts) {
+    mappings.push(...part.mappings.map(m => ({ ...m, start: m.start + text.length, end: m.end + text.length })));
+    text += part.text;
+  }
+  return { text, mappings };
+}
+
+export function joinMapped(parts: Mapped[], separator: Mapped): Mapped {
+  return concat(...parts.flatMap((part, i) => i ? [separator, part] : [part]));
+}
+
+export function originAt(output: Mapped, start: number, end = start + 1): Span | undefined {
+  const candidates = output.mappings.filter(m => m.start < end && m.end > start);
+  candidates.sort((a, b) => (a.origin.end - a.origin.start) - (b.origin.end - b.origin.start));
+  return candidates[0]?.origin ?? output.mappings.find(m => m.start <= start && m.end > start)?.origin;
+}
+
+export function bendError(error: unknown, outputs: Mapped[]): Error {
+  const err = error as B.Err;
+  if (err?.$ !== "Err" || !err.spn) return error instanceof Error ? error : new Error(errorText(error));
+  const output = outputs.find(o => o.text === err.spn!.file.str);
+  const origin = output && originAt(output, err.spn.beg, Math.max(err.spn.end, err.spn.beg + 1));
+  if (!origin) return new Error(errorText(error));
+  const detail = B.err_show({ ...err, spn: undefined });
+  const generated = { source: { file: "generated Bend", text: output!.text }, start: err.spn.beg, end: err.spn.end };
+  return new Error(`${location(origin)}: Bend ${detail}\n${excerpt(origin)}\nGenerated Bend:\n${excerpt(generated)}`);
+}
