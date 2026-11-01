@@ -945,7 +945,7 @@ async function book_file(book: Book, file: string, spn?: Span): Promise<string> 
   if (!fs.existsSync(file)) {
     throw Err(book, ctx_nil(), "no such file: " + file, undefined, spn);
   }
-  return fs.realpathSync(file);
+  return file === BASE_BEND ? file : fs.realpathSync(file);
 }
 
 export async function book_load(book: Book, file: string, ns: string, seen: Map<string, string | null>, spn?: Span, root?: string): Promise<number> {

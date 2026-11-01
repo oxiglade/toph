@@ -15,7 +15,8 @@ export async function runFile(file: string, options: Options & { law?: string },
     });
   }
   async function open() {
-    worker = new Worker(new URL("./worker.ts", import.meta.url).href);
+    const entry = import.meta.url.startsWith("file:///$bunfs/") ? "./check/worker.ts" : "./worker.ts";
+    worker = new Worker(new URL(entry, import.meta.url));
     await ask(undefined, 30000);
     return ask({ kind: "load", file }, 30000);
   }
