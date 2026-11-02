@@ -3,6 +3,7 @@ import { B, errorText, show, type Term } from "../bend.ts";
 import { Generator, Random, Unsupported, smaller, weight } from "./generate.ts";
 import { accelerate } from "./naturals.ts";
 import { Constraints, type Variable } from "./constraints.ts";
+import { loadLaw } from "../syntax/build.ts";
 
 export type Options = { n: number; seed: number; time: number; samples?: number; fileTime?: number; size?: number };
 export type Program = { book: any; originalBook: any; laws: string[] };
@@ -18,9 +19,11 @@ type Decision = { ok: boolean; proof?: Term; left?: string; right?: string };
 type Binding = { name: string; type: Term; value: Term };
 
 export async function load(file: string, fast = true): Promise<Program> {
-  const book = B.book_nil();
-  await B.book_load(book, resolve(file), "", new Map());
-  B.book_valid(book);
+  const book = file.endsWith(".law") ? await loadLaw(file) : B.book_nil();
+  if (!file.endsWith(".law")) {
+    await B.book_load(book, resolve(file), "", new Map());
+    B.book_valid(book);
+  }
   const laws = [...new Set<string>(book.order)].filter(name => {
     const def = book.tlds[name];
     return def.$ === "Def" && def.l && !def.b;

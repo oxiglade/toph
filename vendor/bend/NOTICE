@@ -5,10 +5,11 @@ Tag: v2.0.39
 Copied bend2/{bend.ts,comp.ts,main.ts,safe.ts,base.bend} and LICENSE.
 Bend is licensed under Apache-2.0; see LICENSE.
 
-Toph modifies bend.ts only to import base.bend as a Bun file asset,
-resolve BEND_DIR and BASE_BEND from that asset, and skip realpath for
-Base (Bun's embedded files are not filesystem symlinks). This embeds
-Base in the standalone executable. All other copied files are unchanged.
+Toph modifies bend.ts to embed base.bend as a Bun file asset, resolve
+BEND_DIR and BASE_BEND from it, and skip realpath for embedded Base.
+The loader also accepts in-memory sources at their intended paths so
+generated modules use the same imports during validation and on disk.
+All other copied files are unchanged.
 
 Refresh: bun scripts/vendor-bend.ts v2.0.39
 version.json records the commit, version and unmodified source hashes.

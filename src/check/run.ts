@@ -1,14 +1,9 @@
 import type { Options, Result } from "./engine.ts";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 export async function runFile(file: string, options: Options & { law?: string }, onResult?: (r: Result) => void) {
   const start = performance.now();
   const until = start + (options.fileTime ?? 30) * 1000;
   const remaining = () => Math.max(0, until - performance.now());
-  const temporary = file.endsWith(".law") ? mkdtempSync(join(tmpdir(), "toph-check-")) : undefined;
-  let input = file;
   let worker: Worker | undefined;
   function ask(message: object | undefined, ms: number): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -25,9 +20,7 @@ export async function runFile(file: string, options: Options & { law?: string },
     const entry = import.meta.url.startsWith("file:///$bunfs/") ? "./check/worker.ts" : "./worker.ts";
     worker = new Worker(new URL(entry, import.meta.url));
     await ask(undefined, remaining());
-    const ready = await ask({ kind: "load", file: input, buildDirectory: input === file ? temporary : undefined }, remaining());
-    if (temporary) input = join(temporary, "LAWS.bend");
-    return ready;
+    return ask({ kind: "load", file }, remaining());
   }
   function timeout(law: string, elapsedMs: number): Result {
     return { law, status: "timeout", seed: options.seed, attempted: 0, accepted: 0, elapsedMs,
@@ -82,6 +75,5 @@ export async function runFile(file: string, options: Options & { law?: string },
     throw error;
   } finally {
     worker?.terminate();
-    if (temporary) rmSync(temporary, { recursive: true, force: true });
   }
 }

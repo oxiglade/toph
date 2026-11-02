@@ -8,15 +8,22 @@ import { Fields } from "./fields.ts";
 import { parseModule } from "./parser.ts";
 import { at, bendError, concat, joinMapped, mapped, SourceError, type Diagnostic, type Mapped } from "./source.ts";
 
-export async function desugarMapped(source: string, file: string, outputDir = dirname(resolve(file)), fields = new Fields(), modules = new Map<string, string>()): Promise<Mapped> {
+export async function desugarMapped(source: string, file: string, outputDir = dirname(resolve(file)), fields = new Fields(), modules = new Map<string, string>(), sources?: ReadonlyMap<string, string>, inputs?: Set<string>): Promise<Mapped> {
   const module = parseModule(source, file);
   if (module.diagnostics.length) throw new SourceError(module.diagnostics);
   const ctx = new Context(fields), seen = new Map(), imports: Mapped[] = [];
-  for (const imp of module.imports) {
+  const resolved = module.imports.map(imp => {
     const imported = at(imp.span, () => imp.path === "Base" ? B.BASE_BEND : realpathSync(resolve(dirname(file), imp.path)));
     const target = modules.get(imported) ?? imported;
     const ns = imp.path === "Base" ? "" : relative(outputDir, target).replace(/\.bend$/, "");
-    await B.book_load(ctx.book, target, ns, seen, undefined, outputDir);
+    return { imp, imported, target, ns };
+  });
+  for (const { imported, target, ns } of resolved) {
+    if (!modules.has(imported)) await B.book_load(ctx.book, target, ns, seen, undefined, outputDir);
+  }
+  for (const path of seen.keys()) inputs?.add(path);
+  for (const { imp, target, ns } of resolved) {
+    await B.book_load(ctx.book, target, ns, seen, undefined, outputDir, sources);
     if (imp.alias) {
       if (ctx.aliases[imp.alias] !== undefined) throw new SourceError([{ message: "duplicate import alias: " + imp.alias, span: imp.span }]);
       ctx.aliases[imp.alias] = ns;

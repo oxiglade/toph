@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -66,6 +66,78 @@ test("build writes plain Bend and check accepts law source without writing besid
     expect(report.file).toBe(input);
     expect(report.results[0].bindings).toEqual({ n: "0n" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const command of ["build", "check"]) {
+  for (const location of ["dot.test", ".local", "read-only dotted TMPDIR"]) {
+    test(`${command} resolves law helpers under ${location}`, () => {
+      const root = mkdtempSync(join(tmpdir(), "toph-paths-"));
+      const temporary = join(root, location === "read-only dotted TMPDIR" ? "temp.dir" : "tmp");
+      const project = join(root, location === "read-only dotted TMPDIR" ? "plain" : location, "project");
+      mkdirSync(temporary);
+      mkdirSync(project, { recursive: true });
+      try {
+        if (location === "read-only dotted TMPDIR") chmodSync(temporary, 0o555);
+        writeFileSync(join(project, "main.bend"), "import Base\ntype Counter is Data:\n  Counter{value: Nat}\n");
+        writeFileSync(join(project, "helper.law"), "import Base\nimport ./main.bend as M\ndef value(c: M.Counter) -> Nat:\n  c.value\n");
+        writeFileSync(join(project, "LAWS.law"), "import Base\nimport ./main.bend as M\nimport ./helper.law as H\nlaw projection(+c: M.Counter):\n  H.value(c) == c.value\n");
+        const input = join(project, "LAWS.law");
+        const output = join(project, "LAWS.bend");
+        const before = readdirSync(project).sort();
+        const env = { ...process.env, TMPDIR: temporary };
+        const result = cli(command === "build" ? [command, input, "-o", output]
+          : [command, input, "--json", "--n", "10"], env);
+        expect(result.err).toBe("");
+        expect(result.code).toBe(0);
+        if (command === "build") {
+          expect(readFileSync(output, "utf8")).toContain("import ./main.bend as M\n");
+          const checked = cli(["check", output, "--json", "--n", "10"], env);
+          expect(checked.err).toBe("");
+          expect(checked.code).toBe(0);
+          expect(JSON.parse(checked.out).results.map((r: any) => r.status)).toEqual(["pass"]);
+        } else {
+          expect(JSON.parse(result.out).results.map((r: any) => r.status)).toEqual(["pass"]);
+          expect(readdirSync(project).sort()).toEqual(before);
+        }
+        expect(readdirSync(temporary)).toEqual([]);
+      } finally {
+        chmodSync(temporary, 0o755);
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+}
+
+test.each(["main.law", "some.source.law"])("check %s does not require an output filename or overwrite its implementation", name => {
+  const dir = mkdtempSync(join(tmpdir(), "toph-check-name-"));
+  try {
+    const implementation = "import Base\ndef value() -> Nat:\n  1n\n";
+    writeFileSync(join(dir, "main.bend"), implementation);
+    writeFileSync(join(dir, name), "import Base\nimport ./main.bend as M\nlaw same:\n  M.value() == 1n\n");
+    const result = cli(["check", join(dir, name), "--json"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out).results.map((r: any) => r.status)).toEqual(["pass"]);
+    expect(readFileSync(join(dir, "main.bend"), "utf8")).toBe(implementation);
+    expect(readdirSync(dir).sort()).toEqual(["main.bend", name].sort());
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("build validates final import paths before writing outputs", () => {
+  const root = mkdtempSync(join(tmpdir(), "toph-final-imports-"));
+  const source = join(root, "dot.test");
+  const temporary = join(source, "tmp");
+  const output = join(root, "LAWS.bend");
+  mkdirSync(temporary, { recursive: true });
+  try {
+    writeFileSync(join(source, "main.bend"), "import Base\ndef value() -> Nat:\n  1n\n");
+    writeFileSync(join(source, "LAWS.law"), "import Base\nimport ./main.bend as M\nlaw same:\n  M.value() == 1n\n");
+    const result = cli(["build", join(source, "LAWS.law"), "-o", output], { ...process.env, TMPDIR: temporary });
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("import path of plain names");
+    expect(readdirSync(root)).toEqual(["dot.test"]);
+    expect(readdirSync(temporary)).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("the file deadline interrupts law compilation and removes its temporary files", () => {

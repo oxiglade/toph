@@ -929,7 +929,8 @@ async function name_hash(book: Book, nv: string, spn?: Span): Promise<string> {
   return got;
 }
 
-async function book_file(book: Book, file: string, spn?: Span): Promise<string> {
+async function book_file(book: Book, file: string, spn?: Span, sources?: ReadonlyMap<string, string>): Promise<string> {
+  if (sources?.has(file)) return file;
   if (file.startsWith(BEND_LIB + "/") && !fs.existsSync(file)) {
     const pkg = file.slice(BEND_LIB.length + 1).split("/")[0];
     const man = await hub_get(book, pkg + "/manifest", pkg.slice(2), spn);
@@ -948,8 +949,8 @@ async function book_file(book: Book, file: string, spn?: Span): Promise<string> 
   return file === BASE_BEND ? file : fs.realpathSync(file);
 }
 
-export async function book_load(book: Book, file: string, ns: string, seen: Map<string, string | null>, spn?: Span, root?: string): Promise<number> {
-  const real = await book_file(book, file, spn);
+export async function book_load(book: Book, file: string, ns: string, seen: Map<string, string | null>, spn?: Span, root?: string, sources?: ReadonlyMap<string, string>): Promise<number> {
+  const real = await book_file(book, file, spn, sources);
   if (seen.has(real)) {
     if (seen.get(real) === null) {
       throw Err(book, ctx_nil(), "an import cycle through " + file, undefined, spn);
@@ -959,7 +960,7 @@ export async function book_load(book: Book, file: string, ns: string, seen: Map<
   seen.set(real, null);
   const dir   = real.slice(0, real.lastIndexOf("/") + 1);
   const top   = root ?? dir;
-  const text  = fs.readFileSync(real, "utf8");
+  const text  = sources?.get(real) ?? fs.readFileSync(real, "utf8");
   const lines = text.split("\n");
   const body  = lines.slice();
   const al    : Record<Name, Name> = Object.create(null);
@@ -982,7 +983,7 @@ export async function book_load(book: Book, file: string, ns: string, seen: Map<
     }
     body[i] = "";
     if (m[2] === undefined) {
-      await book_load(book, BASE_BEND, "", seen, sp);
+      await book_load(book, BASE_BEND, "", seen, sp, undefined, sources);
       continue;
     }
     if (!m[1].endsWith(".bend")) {
@@ -998,7 +999,7 @@ export async function book_load(book: Book, file: string, ns: string, seen: Map<
     if (!ok(as.replace(/^\.\//, "").slice(0, -5), hub(as))) {
       throw bad();
     }
-    const got = await book_file(book, hub(as) ? BEND_LIB + "/" + rel : path.posix.resolve(dir, rel), sp);
+    const got = await book_file(book, hub(as) ? BEND_LIB + "/" + rel : path.posix.resolve(dir, rel), sp, sources);
     const lib = fs.existsSync(BEND_LIB) ? fs.realpathSync(BEND_LIB) + "/" : "\0";
     const sub = (got.startsWith(lib) ? got.slice(lib.length)
       : path.posix.relative(top, got)).replace(/\.bend$/, "");
@@ -1006,7 +1007,7 @@ export async function book_load(book: Book, file: string, ns: string, seen: Map<
       throw bad();
     }
     al[m[2]] = sub;
-    await book_load(book, got, sub, seen, sp, top);
+    await book_load(book, got, sub, seen, sp, top, sources);
   }
   const n0 = book.order.length;
   parse_book(book, dir, body.join("\n"), ns, al);

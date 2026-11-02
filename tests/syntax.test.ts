@@ -75,6 +75,25 @@ test("build rejects cycles and does not overwrite an imported implementation", a
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test.each(["direct", "transitive"])("generated modules cannot hide a %s imported output", async kind => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-overlay-input-")));
+  try {
+    writeFileSync(join(dir, "records.bend"), "import Base\ntype Counter is Data:\n  Counter{value: Nat}\n");
+    writeFileSync(join(dir, "helper.law"), "import Base\nimport ./records.bend as R\ndef value(c: R.Counter) -> Nat:\n  c.value\n");
+    const input = join(dir, "LAWS.law");
+    const source = "import Base\nimport ./helper.law as H\nimport ./records.bend as R\nlaw same(+c: R.Counter):\n  H.value(c) == c.value\n";
+    writeFileSync(input, source);
+    await build(input);
+    const fields = join(dir, "LAWS_fields.bend");
+    const original = readFileSync(fields, "utf8") + "def sentinel() -> Nat:\n  99n\n";
+    writeFileSync(fields, original);
+    writeFileSync(join(dir, "bridge.bend"), "import ./LAWS_fields.bend as F\n");
+    writeFileSync(input, source.replace("law same", `import ./${kind === "direct" ? "LAWS_fields" : "bridge"}.bend as F\nlaw same`));
+    await expect(build(input)).rejects.toThrow("overwrite an input");
+    expect(readFileSync(fields, "utf8")).toBe(original);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("premises, Boolean lifting and erased List arguments keep their meaning", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "toph-premises-")));
   try {
