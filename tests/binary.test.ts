@@ -14,7 +14,7 @@ test("the compiled binary builds and checks outside the repository without Bun o
     const run = (...args: string[]) => Bun.spawnSync([executable, ...args], {
       cwd: dir, env: { PATH: dir }, timeout: 10000,
     });
-    expect(run("--version").stdout.toString()).toContain("toph 0.1.0 (Bend 2.0.39)");
+    expect(run("--version").stdout.toString()).toContain("toph 0.1.1 (Bend 2.0.39)");
     copyFileSync(join(import.meta.dir, "fixtures/false.bend"), join(dir, "false.bend"));
     const failure = run("check", "false.bend", "--n", "30", "--json");
     expect(failure.stderr.toString()).toBe("");

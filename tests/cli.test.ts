@@ -9,7 +9,7 @@ function cli(args: string[], env = process.env) {
 }
 
 test("CLI reports version, selected counterexamples and invalid options", () => {
-  expect(cli(["--version"]).out).toContain("toph 0.1.0 (Bend 2.0.39)");
+  expect(cli(["--version"]).out).toContain("toph 0.1.1 (Bend 2.0.39)");
   const result = cli(["check", join(import.meta.dir, "fixtures/false.bend"), "--law", "positive_is_zero", "--n", "30"]);
   expect(result.code).toBe(1);
   expect(result.out).toContain("n = 1n");
