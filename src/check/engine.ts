@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { B, errorText, show, type Term } from "../bend.ts";
 import { Generator, Random, Unsupported, smaller, weight } from "./generate.ts";
-import { accelerate } from "./naturals.ts";
+import { accelerate } from "./numerics.ts";
 import { Constraints, type Variable } from "./constraints.ts";
 import { loadLaw } from "../syntax/build.ts";
 
